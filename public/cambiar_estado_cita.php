@@ -12,8 +12,19 @@ if (!in_array($rolId, [1, 2, 3], true)) {
     exit("No tienes permiso.");
 }
 
-$id = filter_input(INPUT_GET, "id", FILTER_VALIDATE_INT);
-$nuevoEstado = $_GET["estado"] ?? "";
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    header("Location: citas_moderno.php");
+    exit;
+}
+
+$token = $_POST["csrf_token"] ?? "";
+if (!is_string($token) || empty($_SESSION["csrf_token"]) || !hash_equals($_SESSION["csrf_token"], $token)) {
+    http_response_code(403);
+    exit("Solicitud no válida.");
+}
+
+$id = filter_input(INPUT_POST, "id", FILTER_VALIDATE_INT);
+$nuevoEstado = $_POST["estado"] ?? "";
 if (!$id || !$nuevoEstado) {
     header("Location: citas_moderno.php");
     exit;
@@ -22,48 +33,56 @@ if (!$id || !$nuevoEstado) {
 require_once __DIR__ . "/../config/database.php";
 $pdo = conectarBD();
 
-$estadosValidos = ["solicitada", "confirmada", "completada", "cancelada", "no_asistio"];
+$estadosValidos = ["confirmada", "completada", "no_asistio"];
 if (!in_array($nuevoEstado, $estadosValidos, true)) {
     header("Location: ver_cita.php?id=$id&error=estado");
     exit;
 }
 
-$stmt = $pdo->prepare("SELECT * FROM citas WHERE id = :id");
-$stmt->execute(["id" => $id]);
-$cita = $stmt->fetch();
-if (!$cita) {
-    header("Location: citas_moderno.php");
-    exit;
-}
-
-$estadoActual = $cita["estado"];
-$transiciones = [
-    "solicitada" => ["confirmada", "cancelada"],
-    "confirmada" => ["completada", "no_asistio", "cancelada"],
-    "completada" => [],
-    "cancelada" => [],
-    "no_asistio" => []
-];
-if (!in_array($nuevoEstado, $transiciones[$estadoActual] ?? [], true)) {
-    header("Location: ver_cita.php?id=$id&error=transicion");
-    exit;
-}
-
-if ($rolId === 3) {
-    $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u");
-    $stm->execute(["u" => $_SESSION["usuario_id"]]);
-    $mp = $stm->fetch();
-    if (!$mp || (int)$mp["id"] !== (int)$cita["medico_id"]) {
-        http_response_code(403);
-        exit("No tienes permiso.");
-    }
-}
-
 try {
     $pdo->beginTransaction();
+    $stmt = $pdo->prepare("SELECT * FROM citas WHERE id = :id FOR UPDATE");
+    $stmt->execute(["id" => $id]);
+    $cita = $stmt->fetch();
+    if (!$cita) {
+        $pdo->rollBack();
+        header("Location: citas_moderno.php");
+        exit;
+    }
+
+    $transiciones = [
+        "solicitada" => ["confirmada"],
+        "confirmada" => ["completada", "no_asistio"],
+        "completada" => [],
+        "cancelada" => [],
+        "no_asistio" => []
+    ];
+    if (!in_array($nuevoEstado, $transiciones[$cita["estado"]] ?? [], true)) {
+        $pdo->rollBack();
+        header("Location: ver_cita.php?id=$id&error=transicion");
+        exit;
+    }
+
+    if ($rolId === 3) {
+        if (!in_array($nuevoEstado, ["completada", "no_asistio"], true)) {
+            $pdo->rollBack();
+            http_response_code(403);
+            exit("No tienes permiso.");
+        }
+        $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u");
+        $stm->execute(["u" => $_SESSION["usuario_id"]]);
+        $mp = $stm->fetch();
+        if (!$mp || (int)$mp["id"] !== (int)$cita["medico_id"]) {
+            $pdo->rollBack();
+            http_response_code(403);
+            exit("No tienes permiso.");
+        }
+    }
+
     $upd = $pdo->prepare("UPDATE citas SET estado = :est, updated_at = now() WHERE id = :id");
     $upd->execute(["est" => $nuevoEstado, "id" => $id]);
     $pdo->commit();
+    $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
     header("Location: ver_cita.php?id=$id&estado_ok=1");
     exit;
 } catch (Throwable $e) {

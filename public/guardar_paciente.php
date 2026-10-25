@@ -42,6 +42,19 @@ $apellidos = trim((string) ($_POST['apellidos'] ?? ''));
 $documento = opcional('documento_identidad');
 $fecha = opcional('fecha_nacimiento');
 $sexo = opcional('sexo');
+
+$sexosPermitidos = [
+    'masculino',
+    'femenino',
+    'otro',
+    'no_especificado'
+];
+
+if ($sexo !== null && !in_array($sexo, $sexosPermitidos, true)) {
+    header('Location: registrar_paciente.php?error=datos');
+    exit;
+}
+
 $telefono = opcional('telefono');
 $correo = opcional('correo');
 $direccion = opcional('direccion');

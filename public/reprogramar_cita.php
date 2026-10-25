@@ -33,7 +33,7 @@ if (!$cita) {
     exit;
 }
 
-if (in_array($cita["estado"], ["completada", "cancelada"], true)) {
+if (!in_array($cita["estado"], ["solicitada", "confirmada"], true)) {
     header("Location: ver_cita.php?id=".$id."&error=no_reprogramar");
     exit;
 }
@@ -53,7 +53,7 @@ if ($fecha && preg_match("/^\d{4}-\d{2}-\d{2}$/", $fecha)) {
                 $stmtB = $pdo->prepare("SELECT inicio, fin FROM bloqueos_horario WHERE medico_id = :m AND DATE(inicio) <= :f AND DATE(fin) >= :f");
                 $stmtB->execute(["m" => $cita["medico_id"], "f" => $fecha]);
                 $bloqueos = $stmtB->fetchAll();
-                $stmtC = $pdo->prepare("SELECT inicio, fin FROM citas WHERE medico_id = :m AND id != :id AND DATE(inicio) = :f AND estado IN (\"solicitada\",\"confirmada\")");
+                $stmtC = $pdo->prepare("SELECT inicio, fin FROM citas WHERE medico_id = :m AND id != :id AND DATE(inicio) = :f AND estado IN ('solicitada','confirmada')");
                 $stmtC->execute(["m" => $cita["medico_id"], "id" => $id, "f" => $fecha]);
                 $citasOcupadas = $stmtC->fetchAll();
                 foreach ($horarios as $horario) {
@@ -90,7 +90,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $token = $_POST["csrf_token"] ?? "";
     if (!is_string($token) || empty($_SESSION["csrf_token"]) || !hash_equals($_SESSION["csrf_token"], $token)) {
         http_response_code(403);
-        exit("Solicitud no válida.");
+        exit("Solicitud no vÃ¡lida.");
     }
     $nuevaFecha = trim($_POST["fecha"] ?? "");
     $nuevaHora = trim($_POST["hora_inicio"] ?? "");
@@ -100,6 +100,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
     try {
         $pdo->beginTransaction();
+        $stmtActual = $pdo->prepare("SELECT estado FROM citas WHERE id = :id FOR UPDATE");
+        $stmtActual->execute(["id" => $id]);
+        $citaActual = $stmtActual->fetch();
+        if (!$citaActual || !in_array($citaActual["estado"], ["solicitada", "confirmada"], true)) {
+            $pdo->rollBack();
+            header("Location: ver_cita.php?id=$id&error=no_reprogramar");
+            exit;
+        }
         $diaSemana = (int)date("N", strtotime($nuevaFecha));
         $stmtH = $pdo->prepare("SELECT hora_inicio, hora_fin, intervalo_minutos FROM horarios_atencion WHERE medico_id = :m AND dia_semana = :d AND activo = TRUE ORDER BY hora_inicio ASC");
         $stmtH->execute(["m" => $cita["medico_id"], "d" => $diaSemana]);
@@ -125,14 +133,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
         $inicioNuevo = $nuevaFecha." ".$nuevaHoraNorm;
         $finNuevo = date("Y-m-d H:i:s", $finPropuestoTs);
-        $stmtB = $pdo->prepare("SELECT 1 FROM bloqueos_horario WHERE medico_id = :m AND tsrange(inicio, fin, \"[\") && tsrange(:ini::timestamp, :fin::timestamp, \"[\")");
+        $stmtB = $pdo->prepare("SELECT 1 FROM bloqueos_horario WHERE medico_id = :m AND tsrange(inicio, fin, '[)') && tsrange(:ini::timestamp, :fin::timestamp, '[)')");
         $stmtB->execute(["m" => $cita["medico_id"], "ini" => $inicioNuevo, "fin" => $finNuevo]);
         if ($stmtB->fetch()) {
             $pdo->rollBack();
             header("Location: reprogramar_cita.php?id=$id&error=bloqueado");
             exit;
         }
-        $stmtC = $pdo->prepare("SELECT 1 FROM citas WHERE medico_id = :m AND id != :id AND estado IN (\"solicitada\",\"confirmada\") AND tsrange(inicio, fin, \"[\") && tsrange(:ini::timestamp, :fin::timestamp, \"[\")");
+        $stmtC = $pdo->prepare("SELECT 1 FROM citas WHERE medico_id = :m AND id != :id AND estado IN ('solicitada','confirmada') AND tsrange(inicio, fin, '[)') && tsrange(:ini::timestamp, :fin::timestamp, '[)')");
         $stmtC->execute(["m" => $cita["medico_id"], "id" => $id, "ini" => $inicioNuevo, "fin" => $finNuevo]);
         if ($stmtC->fetch()) {
             $pdo->rollBack();
@@ -160,7 +168,7 @@ renderSidebar("citas");
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <div>
             <h1 style="font-size: 26px; font-weight: 700;">Reprogramar Cita</h1>
-            <p style="color: var(--color-text-light);">Código: <?= htmlspecialchars($cita["codigo_cita"]) ?></p>
+            <p style="color: var(--color-text-light);">CÃ³digo: <?= htmlspecialchars($cita["codigo_cita"]) ?></p>
         </div>
         <a href="ver_cita.php?id=<?= (int)$id ?>" class="btn btn-secondary">Volver</a>
     </div>
@@ -173,8 +181,8 @@ renderSidebar("citas");
                     <div style="font-weight: 600;">Paciente #<?= (int)$cita["paciente_id"] ?></div>
                 </div>
                 <div>
-                    <div style="color: var(--color-text-light); font-size: 12px;">Médico</div>
-                    <div style="font-weight: 600;">Médico #<?= (int)$cita["medico_id"] ?></div>
+                    <div style="color: var(--color-text-light); font-size: 12px;">MÃ©dico</div>
+                    <div style="font-weight: 600;">MÃ©dico #<?= (int)$cita["medico_id"] ?></div>
                 </div>
                 <div>
                     <div style="color: var(--color-text-light); font-size: 12px;">Fecha/Hora actual</div>
@@ -190,8 +198,8 @@ renderSidebar("citas");
             $e = [
                 "datos" => "Completa todos los campos.",
                 "pasado" => "No se pueden reprogramar a fechas pasadas.",
-                "horario" => "El horario seleccionado no es válido.",
-                "conflicto" => "El médico ya tiene una cita en ese horario.",
+                "horario" => "El horario seleccionado no es vÃ¡lido.",
+                "conflicto" => "El mÃ©dico ya tiene una cita en ese horario.",
                 "bloqueado" => "El horario se encuentra bloqueado.",
                 "servidor" => "No se pudo reprogramar la cita."
             ];
@@ -228,7 +236,7 @@ renderSidebar("citas");
                         <?php endif; ?>
                     </div>
                     <?php if (!empty($horariosDisponibles)): ?>
-                        <button type="submit" class="btn btn-primary">Confirmar reprogramación</button>
+                        <button type="submit" class="btn btn-primary">Confirmar reprogramaciÃ³n</button>
                     <?php endif; ?>
                 </form>
             <?php else: ?>

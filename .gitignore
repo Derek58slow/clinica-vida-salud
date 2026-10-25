@@ -3,6 +3,7 @@
 !.env.example
 /vendor/
 /node_modules/
+/tmp/
 .vscode/settings.json
 *.log
 .DS_Store

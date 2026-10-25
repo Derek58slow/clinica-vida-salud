@@ -74,8 +74,8 @@ renderSidebar("pacientes");
                 <thead>
                     <tr>
                         <th>Fecha/Hora</th>
-                        <th>Código</th>
-                        <th>Médico</th>
+                        <th>CÃ³digo</th>
+                        <th>MÃ©dico</th>
                         <th>Especialidad</th>
                         <th>Modalidad</th>
                         <th>Estado</th>
@@ -118,7 +118,7 @@ renderSidebar("pacientes");
                     <tr>
                         <th>Fecha Cambio</th>
                         <th>Cita</th>
-                        <th>Acción</th>
+                        <th>AcciÃ³n</th>
                         <th>Estado</th>
                         <th>Nuevo Horario</th>
                         <th>Usuario</th>

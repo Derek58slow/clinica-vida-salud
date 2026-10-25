@@ -34,8 +34,8 @@ renderSidebar("");
                             <div style="font-weight: 500; margin-bottom: 4px;"><?= htmlspecialchars($n["mensaje"]) ?></div>
                             <div style="color: var(--color-text-light); font-size: 13px;">
                                 <?= date("d/m/Y H:i", strtotime($n["created_at"])) ?>
-                                <?php if ($n["codigo_cita"]): ?> • <?= htmlspecialchars($n["codigo_cita"]) ?><?php endif; ?>
-                                • Estado: <?= htmlspecialchars($n["estado"]) ?>
+                                <?php if ($n["codigo_cita"]): ?> â€¢ <?= htmlspecialchars($n["codigo_cita"]) ?><?php endif; ?>
+                                â€¢ Estado: <?= htmlspecialchars($n["estado"]) ?>
                             </div>
                         </div>
                     </div>

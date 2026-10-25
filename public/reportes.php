@@ -49,7 +49,7 @@ renderSidebar("reportes");
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
         <div>
             <h1 style="font-size: 26px; font-weight: 700;">Reportes</h1>
-            <p style="color: var(--color-text-light);">Estadísticas con datos reales de PostgreSQL</p>
+            <p style="color: var(--color-text-light);">EstadÃ­sticas con datos reales de PostgreSQL</p>
         </div>
     </div>
 
@@ -111,13 +111,13 @@ renderSidebar("reportes");
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Citas por Médico</h2>
+                <h2 class="card-title">Citas por MÃ©dico</h2>
             </div>
             <div class="card-body" style="padding: 0;">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Médico</th>
+                            <th>MÃ©dico</th>
                             <th style="text-align: right;">Cantidad</th>
                         </tr>
                     </thead>

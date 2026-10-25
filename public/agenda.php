@@ -21,7 +21,7 @@ $medicoFiltro = filter_input(INPUT_GET, "medico_id", FILTER_VALIDATE_INT);
 $especialidadFiltro = filter_input(INPUT_GET, "especialidad_id", FILTER_VALIDATE_INT);
 $estadoFiltro = trim($_GET["estado"] ?? "");
 $fecha = trim($_GET["fecha"] ?? date("Y-m-d"));
-if (!preg_match("/^\d{4}-\d{2}-\d{2}$/", $fecha)) {
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) || DateTime::createFromFormat('!Y-m-d', $fecha)?->format('Y-m-d') !== $fecha) {
     $fecha = date("Y-m-d");
 }
 
@@ -79,13 +79,13 @@ renderSidebar("agenda");
 <div style="max-width: 1400px; margin: 0 auto;">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px;">
         <div>
-            <h1 style="font-size: 26px; font-weight: 700; color: var(--color-text); margin-bottom: 6px;">Agenda M�dica</h1>
-            <p style="color: var(--color-text-light); font-size: 14px;">Visualizaci�n por fecha con filtros</p>
+            <h1 style="font-size: 26px; font-weight: 700; color: var(--color-text); margin-bottom: 6px;">Agenda Médica</h1>
+            <p style="color: var(--color-text-light); font-size: 14px;">Visualización por fecha con filtros</p>
         </div>
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <a href="agenda.php?fecha=<?= htmlspecialchars($fechaAnterior) ?><?= $medicoFiltro && $rolId !== 3 ? "&medico_id=$medicoFiltro" : "" ?><?= $especialidadFiltro ? "&especialidad_id=$especialidadFiltro" : "" ?><?= $estadoFiltro ? "&estado=".urlencode($estadoFiltro) : "" ?>" class="btn btn-secondary">? Anterior</a>
+            <a href="agenda.php?fecha=<?= htmlspecialchars($fechaAnterior) ?><?= $medicoFiltro && $rolId !== 3 ? "&medico_id=$medicoFiltro" : "" ?><?= $especialidadFiltro ? "&especialidad_id=$especialidadFiltro" : "" ?><?= $estadoFiltro ? "&estado=".urlencode($estadoFiltro) : "" ?>" class="btn btn-secondary">← Anterior</a>
             <a href="agenda.php?fecha=<?= date("Y-m-d") ?><?= $medicoFiltro && $rolId !== 3 ? "&medico_id=$medicoFiltro" : "" ?><?= $especialidadFiltro ? "&especialidad_id=$especialidadFiltro" : "" ?><?= $estadoFiltro ? "&estado=".urlencode($estadoFiltro) : "" ?>" class="btn btn-secondary">Hoy</a>
-            <a href="agenda.php?fecha=<?= htmlspecialchars($fechaSiguiente) ?><?= $medicoFiltro && $rolId !== 3 ? "&medico_id=$medicoFiltro" : "" ?><?= $especialidadFiltro ? "&especialidad_id=$especialidadFiltro" : "" ?><?= $estadoFiltro ? "&estado=".urlencode($estadoFiltro) : "" ?>" class="btn btn-secondary">Siguiente ?</a>
+            <a href="agenda.php?fecha=<?= htmlspecialchars($fechaSiguiente) ?><?= $medicoFiltro && $rolId !== 3 ? "&medico_id=$medicoFiltro" : "" ?><?= $especialidadFiltro ? "&especialidad_id=$especialidadFiltro" : "" ?><?= $estadoFiltro ? "&estado=".urlencode($estadoFiltro) : "" ?>" class="btn btn-secondary">Siguiente →</a>
         </div>
     </div>
 
@@ -98,9 +98,9 @@ renderSidebar("agenda");
                 </div>
                 <?php if ($rolId !== 3): ?>
                 <div class="form-group" style="margin-bottom: 0; min-width: 220px;">
-                    <label class="form-label">M�dico</label>
+                    <label class="form-label">Médico</label>
                     <select name="medico_id" class="form-select" onchange="this.form.submit()">
-                        <option value="">Todos los m�dicos</option>
+                        <option value="">Todos los médicos</option>
                         <?php foreach ($medicos as $m): ?>
                             <option value="<?= (int)$m["id"] ?>" <?= $medicoFiltro == $m["id"] ? "selected" : "" ?>>Dr(a). <?= htmlspecialchars($m["apellidos"].", ".$m["nombres"]) ?></option>
                         <?php endforeach; ?>
@@ -166,10 +166,10 @@ renderSidebar("agenda");
                                     <span class="badge"><?= htmlspecialchars($c["modalidad"]) ?></span>
                                 </div>
                                 <div style="display: flex; flex-wrap: wrap; gap: 16px; color: var(--color-text-light); font-size: 13px;">
-                                    <span>?? Dr(a). <?= htmlspecialchars($c["med_apellidos"].", ".$c["med_nombres"]) ?></span>
-                                    <span>?? <?= htmlspecialchars($c["especialidad"]) ?></span>
-                                    <span>?? <?= htmlspecialchars($c["codigo_cita"]) ?></span>
-                                    <?php if ($c["documento_identidad"]): ?><span>?? <?= htmlspecialchars($c["documento_identidad"]) ?></span><?php endif; ?>
+                                    <span>Médico: Dr(a). <?= htmlspecialchars($c["med_apellidos"].", ".$c["med_nombres"]) ?></span>
+                                    <span>Especialidad: <?= htmlspecialchars($c["especialidad"]) ?></span>
+                                    <span>Código: <?= htmlspecialchars($c["codigo_cita"]) ?></span>
+                                    <?php if ($c["documento_identidad"]): ?><span>CI: <?= htmlspecialchars($c["documento_identidad"]) ?></span><?php endif; ?>
                                 </div>
                                 <?php if ($c["motivo"]): ?>
                                     <div style="margin-top: 8px; color: var(--color-text); font-size: 13px; background: var(--color-bg); padding: 8px 12px; border-radius: 8px;">
@@ -180,10 +180,10 @@ renderSidebar("agenda");
                         </div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                             <a href="ver_cita.php?id=<?= (int)$c["id"] ?>" class="btn btn-secondary" style="padding: 8px 16px;">Ver detalles</a>
-                            <?php if (in_array($rolId, [1, 2]) && !in_array($estado, ["completada", "cancelada"], true)): ?>
+                            <?php if (in_array($rolId, [1, 2]) && in_array($estado, ["solicitada", "confirmada"], true)): ?>
                                 <a href="reprogramar_cita.php?id=<?= (int)$c["id"] ?>" class="btn btn-secondary" style="padding: 8px 16px;">Reprogramar</a>
                             <?php endif; ?>
-                            <?php if (in_array($rolId, [1, 2]) && $estado !== "cancelada"): ?>
+                            <?php if (in_array($rolId, [1, 2]) && in_array($estado, ["solicitada", "confirmada"], true)): ?>
                                 <a href="cancelar_cita.php?id=<?= (int)$c["id"] ?>" class="btn" style="padding: 8px 16px; background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5;">Cancelar</a>
                             <?php endif; ?>
                         </div>

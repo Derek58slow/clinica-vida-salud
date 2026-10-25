@@ -3,13 +3,12 @@
 
 function conectarBD(): PDO
 {
-    $host = 'localhost';
-    $puerto = '5432';
-    $baseDatos = 'clinica_vida_salud_v2';
-    $usuario = 'postgres';
+    $host = getenv('DB_HOST') ?: 'localhost';
+    $puerto = getenv('DB_PORT') ?: '5432';
+    $baseDatos = getenv('DB_NAME') ?: 'clinica_vida_salud_v2';
+    $usuario = getenv('DB_USER') ?: 'postgres';
 
-    // Para esta prueba local, la contraseña se recibe
-    // mediante una variable de entorno.
+    // La contraseña nunca se guarda en el repositorio.
     $contrasena = getenv('DB_PASSWORD');
 
     if ($contrasena === false || $contrasena === '') {

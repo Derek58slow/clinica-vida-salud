@@ -33,6 +33,9 @@ if (!$cita) {
 }
 
 $rolId = (int)($_SESSION["rol_id"] ?? 0);
+if (empty($_SESSION["csrf_token"])) {
+    $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
+}
 if ($rolId === 3) {
     $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u");
     $stm->execute(["u" => $_SESSION["usuario_id"]]);
@@ -79,7 +82,7 @@ renderSidebar("citas");
     <?php if (isset($_GET["error"])): ?>
         <div class="alert alert-error" style="margin-bottom: 16px;">
             <?php
-            $e = ["no_reprogramar" => "No se puede reprogramar una cita atendida o cancelada.", "no_cancelar" => "No se puede cancelar una cita ya atendida.", "transicion" => "Transición de estado no permitida.", "estado" => "Estado inválido.", "servidor" => "Error al procesar la solicitud."];
+            $e = ["no_reprogramar" => "Solo se pueden reprogramar citas solicitadas o confirmadas.", "no_cancelar" => "Solo se pueden cancelar citas solicitadas o confirmadas.", "transicion" => "TransiciÃ³n de estado no permitida.", "estado" => "Estado invÃ¡lido.", "servidor" => "Error al procesar la solicitud."];
             echo htmlspecialchars($e[$_GET["error"]] ?? "Error.");
             ?>
         </div>
@@ -87,7 +90,7 @@ renderSidebar("citas");
 
     <div class="card" style="margin-bottom: 24px;">
         <div class="card-header">
-            <h2 class="card-title">Información de la Cita</h2>
+            <h2 class="card-title">InformaciÃ³n de la Cita</h2>
         </div>
         <div class="card-body">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
@@ -108,7 +111,7 @@ renderSidebar("citas");
                     <div style="font-weight: 600;"><?= htmlspecialchars($cita["especialidad"]) ?></div>
                 </div>
                 <div>
-                    <div style="color: var(--color-text-light); font-size: 12px; text-transform: uppercase; margin-bottom: 4px;">Médico</div>
+                    <div style="color: var(--color-text-light); font-size: 12px; text-transform: uppercase; margin-bottom: 4px;">MÃ©dico</div>
                     <div style="font-weight: 600;">Dr(a). <?= htmlspecialchars($cita["med_apellidos"].", ".$cita["med_nombres"]) ?></div>
                     <div style="color: var(--color-text-light); font-size: 13px;">Lic. <?= htmlspecialchars($cita["numero_licencia"]) ?></div>
                 </div>
@@ -127,7 +130,7 @@ renderSidebar("citas");
             <?php endif; ?>
             <?php if ($cita["motivo_cancelacion"]): ?>
             <div style="margin-top: 16px; padding: 12px; background: #FEF2F2; border-radius: 8px; color: #991B1B;">
-                <strong>Motivo de cancelación:</strong> <?= nl2br(htmlspecialchars($cita["motivo_cancelacion"])) ?>
+                <strong>Motivo de cancelaciÃ³n:</strong> <?= nl2br(htmlspecialchars($cita["motivo_cancelacion"])) ?>
             </div>
             <?php endif; ?>
         </div>
@@ -141,12 +144,31 @@ renderSidebar("citas");
         <div class="card-body">
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <?php if ($cita["estado"] === "solicitada"): ?>
-                    <a href="cambiar_estado_cita.php?id=<?= (int)$id ?>&estado=confirmada" class="btn btn-primary">Marcar como Confirmada</a>
-                    <a href="cambiar_estado_cita.php?id=<?= (int)$id ?>&estado=cancelada" class="btn" style="background: #FEE2E2; color: #991B1B;">Cancelar</a>
+                    <?php if (in_array($rolId, [1,2], true)): ?>
+                    <form method="POST" action="cambiar_estado_cita.php">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION["csrf_token"]) ?>">
+                        <input type="hidden" name="id" value="<?= (int)$id ?>">
+                        <input type="hidden" name="estado" value="confirmada">
+                        <button type="submit" class="btn btn-primary">Marcar como Confirmada</button>
+                    </form>
+                    <a href="cancelar_cita.php?id=<?= (int)$id ?>" class="btn" style="background: #FEE2E2; color: #991B1B;">Cancelar</a>
+                    <?php endif; ?>
                 <?php elseif ($cita["estado"] === "confirmada"): ?>
-                    <a href="cambiar_estado_cita.php?id=<?= (int)$id ?>&estado=completada" class="btn btn-primary">Marcar como Atendida</a>
-                    <a href="cambiar_estado_cita.php?id=<?= (int)$id ?>&estado=no_asistio" class="btn" style="background: #FEF3C7; color: #92400E;">Marcar No Asistió</a>
-                    <a href="cambiar_estado_cita.php?id=<?= (int)$id ?>&estado=cancelada" class="btn" style="background: #FEE2E2; color: #991B1B;">Cancelar</a>
+                    <form method="POST" action="cambiar_estado_cita.php">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION["csrf_token"]) ?>">
+                        <input type="hidden" name="id" value="<?= (int)$id ?>">
+                        <input type="hidden" name="estado" value="completada">
+                        <button type="submit" class="btn btn-primary">Marcar como Atendida</button>
+                    </form>
+                    <form method="POST" action="cambiar_estado_cita.php">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION["csrf_token"]) ?>">
+                        <input type="hidden" name="id" value="<?= (int)$id ?>">
+                        <input type="hidden" name="estado" value="no_asistio">
+                        <button type="submit" class="btn" style="background: #FEF3C7; color: #92400E;">Marcar No AsistiÃ³</button>
+                    </form>
+                    <?php if (in_array($rolId, [1,2], true)): ?>
+                    <a href="cancelar_cita.php?id=<?= (int)$id ?>" class="btn" style="background: #FEE2E2; color: #991B1B;">Cancelar</a>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -163,7 +185,7 @@ renderSidebar("citas");
                 <thead>
                     <tr>
                         <th>Fecha</th>
-                        <th>Acción</th>
+                        <th>AcciÃ³n</th>
                         <th>Estado</th>
                         <th>Periodo</th>
                         <th>Usuario</th>
@@ -175,7 +197,7 @@ renderSidebar("citas");
                     <tr>
                         <td><?= date("d/m/Y H:i", strtotime($h["created_at"])) ?></td>
                         <td><?= ucfirst($h["accion"]) ?></td>
-                        <td><?= $h["estado_anterior"] ? ucfirst(str_replace("_"," ",$h["estado_anterior"]))." ? " : "" ?><?= ucfirst(str_replace("_"," ",$h["estado_nuevo"])) ?></td>
+                        <td><?= $h["estado_anterior"] ? ucfirst(str_replace("_"," ",$h["estado_anterior"]))." â†’ " : "" ?><?= ucfirst(str_replace("_"," ",$h["estado_nuevo"])) ?></td>
                         <td><?= date("d/m/Y H:i", strtotime($h["inicio_nuevo"])) ?> - <?= date("H:i", strtotime($h["fin_nuevo"])) ?></td>
                         <td><?= $h["usuario_nombre"] ? htmlspecialchars($h["usuario_nombre"]) : "-" ?></td>
                         <td><?= $h["comentario"] ? htmlspecialchars($h["comentario"]) : "-" ?></td>
