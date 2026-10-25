@@ -32,10 +32,12 @@ function renderSidebar($activePage = '') {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/modern.css">
+    <link rel="stylesheet" href="assets/css/modern.css?v=20261025-controls2">
+    <script src="assets/js/ui-controls.js?v=20261025-controls2" defer></script>
 </head>
 <body class="app-layout">
-    <aside class="sidebar">
+    <div class="sidebar-overlay" data-sidebar-close aria-hidden="true"></div>
+    <aside class="sidebar" id="app-sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo">
                 <div class="sidebar-logo-icon">
@@ -149,6 +151,13 @@ function renderSidebar($activePage = '') {
     
     <div class="main-content">
         <header class="header">
+            <button class="menu-toggle" type="button" aria-label="Abrir menú de navegación" aria-controls="app-sidebar" aria-expanded="false">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
             <h1 class="header-title">
                 <?php 
                 switch($activePage) {
@@ -159,6 +168,7 @@ function renderSidebar($activePage = '') {
                     case 'horarios': echo 'Gestión de Horarios'; break;
                     case 'citas': echo 'Citas Médicas'; break;
                     case 'agenda': echo 'Agenda Médica'; break;
+                    case 'reportes': echo 'Reportes'; break;
                     default: echo 'Clínica Vida Salud'; break;
                 }
                 ?>
@@ -181,6 +191,48 @@ function renderFooter() {
     ?>
         </main>
     </div>
+    <script>
+        (() => {
+            const body = document.body;
+            const toggle = document.querySelector('.menu-toggle');
+            const overlay = document.querySelector('[data-sidebar-close]');
+            const sidebar = document.getElementById('app-sidebar');
+
+            if (!toggle || !overlay || !sidebar) return;
+
+            const setMenu = (open) => {
+                body.classList.toggle('sidebar-open', open);
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+            };
+
+            toggle.addEventListener('click', () => setMenu(!body.classList.contains('sidebar-open')));
+            overlay.addEventListener('click', () => setMenu(false));
+            sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => setMenu(false)));
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') setMenu(false);
+            });
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 968) setMenu(false);
+            });
+
+            // En pantallas pequeñas cada celda muestra el nombre de su columna.
+            // Esto permite presentar las tablas como tarjetas sin duplicar HTML.
+            document.querySelectorAll('.table').forEach((table) => {
+                const headers = Array.from(table.querySelectorAll('thead th')).map((header) =>
+                    header.textContent.trim()
+                );
+
+                table.querySelectorAll('tbody tr').forEach((row) => {
+                    Array.from(row.children).forEach((cell, index) => {
+                        if (cell.tagName === 'TD' && headers[index] && !cell.hasAttribute('colspan')) {
+                            cell.dataset.label = headers[index];
+                        }
+                    });
+                });
+            });
+        })();
+    </script>
 </body>
 </html>
 <?php
