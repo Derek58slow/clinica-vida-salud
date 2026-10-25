@@ -5,7 +5,7 @@ session_start();
 require_once __DIR__ . '/../config/database.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: login.php');
+    header('Location: login_moderno.php');
     exit;
 }
 
@@ -13,7 +13,7 @@ $usuario = trim($_POST['usuario'] ?? '');
 $contrasena = $_POST['contrasena'] ?? '';
 
 if ($usuario === '' || $contrasena === '') {
-    header('Location: login.php?error=1');
+    header('Location: login_moderno.php?error=1');
     exit;
 }
 
@@ -41,7 +41,7 @@ try {
             $datos['contrasena_hash']
         )
     ) {
-        header('Location: login.php?error=1');
+        header('Location: login_moderno.php?error=1');
         exit;
     }
 
@@ -51,7 +51,7 @@ try {
     $_SESSION['rol_id'] = $datos['rol_id'];
     $_SESSION['nombre'] = $datos['nombre'];
 
-    header('Location: panel.php');
+    header('Location: panel_moderno.php');
     exit;
 
 } catch (Throwable $e) {
