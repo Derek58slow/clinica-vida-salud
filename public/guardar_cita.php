@@ -84,7 +84,7 @@ try {
     $checkMe->execute(['m' => $medicoId, 'e' => $especialidadId]);
     if (!$checkMe->fetch()) {
         $pdo->rollBack();
-        header('Location: nueva_cita.php?error=horario');
+        header('Location: nueva_cita.php?error=especialidad');
         exit;
     }
     

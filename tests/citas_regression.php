@@ -22,6 +22,7 @@ function verificar(bool $condicion, string $mensaje): void
 }
 
 $reserva = contenido($raiz . '/public/guardar_cita.php');
+$nuevaCita = contenido($raiz . '/public/nueva_cita.php');
 $reprogramacion = contenido($raiz . '/public/reprogramar_cita.php');
 $cancelacion = contenido($raiz . '/public/cancelar_cita.php');
 $cambioEstado = contenido($raiz . '/public/cambiar_estado_cita.php');
@@ -29,6 +30,9 @@ $detalle = contenido($raiz . '/public/ver_cita.php');
 
 verificar(str_contains($reserva, "tsrange(inicio, fin, '[)')"), 'La reserva debe conservar la validación de superposición.');
 verificar(str_contains($reserva, "estado IN ('solicitada','confirmada')"), 'La reserva debe considerar como ocupadas las citas activas.');
+verificar(str_contains($reserva, 'medicos_especialidades'), 'La reserva debe validar que el médico pertenezca a la especialidad.');
+verificar(str_contains($nuevaCita, 'INNER JOIN medicos_especialidades'), 'La pantalla de nueva cita debe filtrar los médicos por especialidad.');
+verificar(str_contains($nuevaCita, 'me.especialidad_id = :especialidad_id'), 'El filtro de médicos debe usar la especialidad seleccionada.');
 verificar(str_contains($reprogramacion, "tsrange(inicio, fin, '[)')"), 'La reprogramación debe usar rangos PostgreSQL válidos.');
 verificar(!str_contains($reprogramacion, 'estado IN (\\"'), 'La reprogramación no debe usar comillas dobles para valores SQL.');
 verificar(str_contains($reprogramacion, 'FOR UPDATE'), 'La reprogramación debe bloquear la cita durante la transacción.');

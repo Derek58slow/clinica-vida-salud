@@ -29,7 +29,32 @@ try {
     $pdo = conectarBD();
     $pacientes = $pdo->query("SELECT id, nombres, apellidos, documento_identidad FROM pacientes WHERE activo = TRUE ORDER BY apellidos, nombres")->fetchAll();
     $especialidades = $pdo->query("SELECT id, nombre FROM especialidades WHERE activo = TRUE ORDER BY nombre")->fetchAll();
-    $medicos = $pdo->query("SELECT m.id, m.nombres, m.apellidos FROM medicos m WHERE m.activo = TRUE ORDER BY m.apellidos, m.nombres")->fetchAll();
+    $medicos = [];
+
+    if ($especialidadId) {
+        $stmtMedicos = $pdo->prepare(
+            "SELECT m.id, m.nombres, m.apellidos
+             FROM medicos m
+             INNER JOIN medicos_especialidades me ON me.medico_id = m.id
+             INNER JOIN especialidades e ON e.id = me.especialidad_id
+             WHERE m.activo = TRUE
+               AND e.activo = TRUE
+               AND me.especialidad_id = :especialidad_id
+             ORDER BY m.apellidos, m.nombres"
+        );
+        $stmtMedicos->execute(['especialidad_id' => $especialidadId]);
+        $medicos = $stmtMedicos->fetchAll();
+
+        $medicoValido = array_filter(
+            $medicos,
+            static fn(array $medico): bool => (int)$medico['id'] === (int)$medicoId
+        );
+        if ($medicoId && empty($medicoValido)) {
+            $medicoId = null;
+        }
+    } else {
+        $medicoId = null;
+    }
 } catch (Throwable $e) {
     error_log($e->getMessage());
     $pacientes = $especialidades = $medicos = [];
@@ -135,6 +160,7 @@ renderSidebar('citas');
                     'conflicto' => 'El médico ya tiene una cita en ese horario.',
                     'bloqueado' => 'El horario se encuentra bloqueado.',
                     'inactivo' => 'El médico o paciente se encuentra inactivo.',
+                    'especialidad' => 'El médico seleccionado no pertenece a la especialidad indicada.',
                     'servidor' => 'No se pudo registrar la cita.'
                 ];
                 echo htmlspecialchars($e[$_GET['error']] ?? 'Error al guardar la cita.');
@@ -159,7 +185,7 @@ renderSidebar('citas');
                     </div>
                     <div class="form-group">
                         <label class="form-label required">Especialidad</label>
-                        <select name="especialidad_id" class="form-select" style="height: 44px;" required>
+                        <select name="especialidad_id" id="especialidad_id" class="form-select" style="height: 44px;" required onchange="actualizarEspecialidad()">
                             <option value="">Seleccionar especialidad</option>
                             <?php foreach ($especialidades as $esp): ?>
                                 <option value="<?= (int)$esp['id'] ?>" <?= ($especialidadId == $esp['id']) ? 'selected' : '' ?>><?= htmlspecialchars($esp['nombre']) ?></option>
@@ -170,12 +196,15 @@ renderSidebar('citas');
                 <div class="form-grid">
                     <div class="form-group">
                         <label class="form-label required">Médico</label>
-                        <select name="medico_id" id="medico_id" class="form-select" style="height: 44px;" required onchange="actualizarDisponibilidad()">
-                            <option value="">Seleccionar médico</option>
+                        <select name="medico_id" id="medico_id" class="form-select" style="height: 44px;" required onchange="actualizarDisponibilidad()" <?= !$especialidadId ? 'disabled' : '' ?>>
+                            <option value=""><?= $especialidadId ? 'Seleccionar médico' : 'Selecciona una especialidad primero' ?></option>
                             <?php foreach ($medicos as $m): ?>
                                 <option value="<?= (int)$m['id'] ?>" <?= ($medicoId == $m['id']) ? 'selected' : '' ?>>Dr(a). <?= htmlspecialchars($m['nombres'].' '.$m['apellidos']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if ($especialidadId && empty($medicos)): ?>
+                            <div style="margin-top: 8px; color: var(--color-warning); font-size: 12px;">No hay médicos activos asignados a esta especialidad.</div>
+                        <?php endif; ?>
                     </div>
                     <div class="form-group">
                         <label class="form-label required">Modalidad</label>
@@ -232,11 +261,31 @@ renderSidebar('citas');
 </div>
 
 <script>
+function parametrosCita() {
+    const parametros = new URLSearchParams();
+    const paciente = document.querySelector('select[name="paciente_id"]')?.value || '';
+    const especialidad = document.getElementById('especialidad_id')?.value || '';
+    const medico = document.getElementById('medico_id')?.value || '';
+    const fecha = document.getElementById('fecha')?.value || '';
+
+    if (paciente) parametros.set('paciente_id', paciente);
+    if (especialidad) parametros.set('especialidad_id', especialidad);
+    if (medico) parametros.set('medico_id', medico);
+    if (fecha) parametros.set('fecha', fecha);
+    return parametros;
+}
+
+function actualizarEspecialidad() {
+    const parametros = parametrosCita();
+    parametros.delete('medico_id');
+    window.location.href = 'nueva_cita.php?' + parametros.toString();
+}
+
 function actualizarDisponibilidad() {
     const medico = document.getElementById('medico_id').value;
     const fecha = document.getElementById('fecha').value;
     if (medico && fecha) {
-        window.location.href = 'nueva_cita.php?medico_id=' + medico + '&fecha=' + fecha + '&paciente_id=' + document.querySelector('select[name="paciente_id"]').value + '&especialidad_id=' + document.querySelector('select[name="especialidad_id"]').value;
+        window.location.href = 'nueva_cita.php?' + parametrosCita().toString();
     }
 }
 </script>
