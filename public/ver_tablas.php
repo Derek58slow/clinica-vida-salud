@@ -1,5 +1,6 @@
-
 <?php
+require_once __DIR__.'/includes/panel_helpers.php';
+exigirRol([1]);
 require_once __DIR__ . '/../config/database.php';
 
 try {

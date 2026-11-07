@@ -1,0 +1,3 @@
+<?php
+require_once dirname(__DIR__).'/src/Services/pdf_comprobante.php';$out=dirname(__DIR__).'/output/pdf/recibo-pago-muestra.pdf';if(!is_dir(dirname($out)))mkdir(dirname($out),0777,true);
+$p=['estado'=>'pagado','monto'=>180.00,'codigo_pago'=>'PAGO-20261103-DEMO01','paciente'=>'Paciente de Demostración','documento_identidad'=>'12345678','codigo_cita'=>'CITA-DEMO-20261104','especialidad'=>'Medicina general','inicio'=>'2026-11-04 10:00:00','pagado_at'=>'2026-11-03 09:30:00','metodo'=>'qr','referencia'=>'QR-984512','registrado_por_nombre'=>'Recepción Demo'];file_put_contents($out,generarReciboPagoPdf($p));echo $out;

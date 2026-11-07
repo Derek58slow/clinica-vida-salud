@@ -1,12 +1,13 @@
 <?php
+require_once __DIR__ . '/icons.php';
 // Funciones auxiliares para el layout moderno
 function getUserInitials($nombre) {
     if (empty($nombre)) return 'U';
-    $parts = explode(' ', trim($nombre));
+    $parts = preg_split('/\s+/u', trim($nombre));
     if (count($parts) >= 2) {
-        return strtoupper(substr($parts[0], 0, 1) . substr($parts[1], 0, 1));
+        return htmlspecialchars(mb_strtoupper(mb_substr($parts[0], 0, 1) . mb_substr($parts[1], 0, 1)), ENT_QUOTES, 'UTF-8');
     }
-    return strtoupper(substr($nombre, 0, 2));
+    return htmlspecialchars(mb_strtoupper(mb_substr($nombre, 0, 2)), ENT_QUOTES, 'UTF-8');
 }
 
 function getRoleName($rolId) {
@@ -19,8 +20,17 @@ function getRoleName($rolId) {
     return $roles[$rolId] ?? 'Usuario';
 }
 
+function getDashboardUrl($rolId) {
+    return [
+        1 => 'panel_administrador.php',
+        2 => 'panel_recepcionista.php',
+        3 => 'panel_medico.php',
+        4 => 'panel_paciente.php'
+    ][(int)$rolId] ?? 'panel_moderno.php';
+}
+
 function renderSidebar($activePage = '') {
-    $rolId = $_SESSION['rol_id'] ?? 0;
+    $rolId = (int)($_SESSION['rol_id'] ?? 0);
     $nombre = $_SESSION['nombre'] ?? 'Usuario';
     ?>
 <!DOCTYPE html>
@@ -29,22 +39,20 @@ function renderSidebar($activePage = '') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clínica Vida Salud</title>
+    <link rel="icon" href="assets/images/isotipo-vida-salud.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/modern.css?v=20261025-controls2">
-    <script src="assets/js/ui-controls.js?v=20261025-controls2" defer></script>
+    <link rel="stylesheet" href="assets/css/modern.css?v=20261101-medico3">
+    <script src="assets/js/ui-controls.js?v=20261101-medico3" defer></script>
 </head>
 <body class="app-layout">
+    <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
     <div class="sidebar-overlay" data-sidebar-close aria-hidden="true"></div>
     <aside class="sidebar" id="app-sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo">
-                <div class="sidebar-logo-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                    </svg>
-                </div>
+                <img class="sidebar-logo-icon" src="assets/images/isotipo-vida-salud.svg" alt="">
                 <span>Clínica Vida Salud</span>
             </div>
         </div>
@@ -52,20 +60,15 @@ function renderSidebar($activePage = '') {
         <nav class="sidebar-nav">
             <div class="nav-section">
                 <div class="nav-section-title">Principal</div>
-                <a href="panel_moderno.php" class="nav-link <?= $activePage === 'panel' ? 'active' : '' ?>">
-                    <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
-                    </svg>
-                    Dashboard
+                <a href="<?= getDashboardUrl($rolId) ?>" class="nav-link <?= $activePage === 'panel' ? 'active' : '' ?>">
+                    <?= icono('inicio', 'nav-link-icon') ?>
+                    Inicio
                 </a>
             </div>
             
             <?php if (in_array($rolId, [1, 2], true)): ?>
             <div class="nav-section">
-                <div class="nav-section-title">Administración</div>
+                <div class="nav-section-title"><?= $rolId === 1 ? 'Administración' : 'Recepción' ?></div>
                 <a href="pacientes_moderno.php" class="nav-link <?= $activePage === 'pacientes' ? 'active' : '' ?>">
                     <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -74,6 +77,15 @@ function renderSidebar($activePage = '') {
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
                     Pacientes
+                </a>
+                <a href="pagos.php" class="nav-link <?= $activePage === 'pagos' ? 'active' : '' ?>">
+                    <?= icono('atendida', 'nav-link-icon') ?>
+                    Pagos y caja
+                </a>
+                <?php if ($rolId === 1): ?>
+                <a href="usuarios_moderno.php" class="nav-link <?= $activePage === 'usuarios' ? 'active' : '' ?>">
+                    <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-2a8 8 0 0116 0v2"></path></svg>
+                    Usuarios
                 </a>
                 <a href="medicos_moderno.php" class="nav-link <?= $activePage === 'medicos' ? 'active' : '' ?>">
                     <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -95,11 +107,13 @@ function renderSidebar($activePage = '') {
                     </svg>
                     Horarios
                 </a>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
             
             <div class="nav-section">
                 <div class="nav-section-title">Citas Médicas</div>
+                <?php if (in_array($rolId, [1, 2], true)): ?>
                 <a href="citas_moderno.php" class="nav-link <?= $activePage === 'citas' ? 'active' : '' ?>">
                     <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -109,12 +123,40 @@ function renderSidebar($activePage = '') {
                     </svg>
                     Citas
                 </a>
+                <?php elseif ($rolId === 4): ?>
+                <a href="mis_citas.php" class="nav-link <?= $activePage === 'mis_citas' ? 'active' : '' ?>">
+                    <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    Mis citas
+                </a>
+                <a href="nueva_cita.php" class="nav-link <?= $activePage === 'nueva_cita' ? 'active' : '' ?>">
+                    <?= icono('agenda', 'nav-link-icon') ?>
+                    Solicitar cita
+                </a>
+                <a href="paciente_perfil.php" class="nav-link <?= $activePage === 'paciente_perfil' ? 'active' : '' ?>">
+                    <?= icono('perfil', 'nav-link-icon') ?>
+                    Mi perfil
+                </a>
+                <a href="metodos_pago.php" class="nav-link <?= $activePage === 'metodos_pago' ? 'active' : '' ?>">
+                    <?= icono('atendida', 'nav-link-icon') ?>
+                    Métodos de pago
+                </a>
+                <?php endif; ?>
                 <?php if (in_array($rolId, [1, 2, 3], true)): ?>
                 <a href="agenda.php" class="nav-link <?= $activePage === 'agenda' ? 'active' : '' ?>">
-                    <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                    </svg>
-                    Agenda
+                    <?= icono('agenda', 'nav-link-icon') ?>
+                    <?= $rolId === 3 ? 'Mi agenda' : 'Agenda' ?>
+                </a>
+                <?php endif; ?>
+                <?php if ($rolId === 3): ?>
+                <a href="medico_pacientes.php" class="nav-link <?= $activePage === 'medico_pacientes' ? 'active' : '' ?>">
+                    <?= icono('pacientes', 'nav-link-icon') ?>
+                    Mis pacientes
+                </a>
+                <a href="medico_perfil.php" class="nav-link <?= $activePage === 'medico_perfil' ? 'active' : '' ?>">
+                    <?= icono('perfil', 'nav-link-icon') ?>
+                    Mi perfil y horarios
                 </a>
                 <?php endif; ?>
                 <?php if (in_array($rolId, [1, 2], true)): ?>
@@ -126,8 +168,12 @@ function renderSidebar($activePage = '') {
                     </svg>
                     Reportes
                 </a>
+                <a href="auditoria.php" class="nav-link <?= $activePage === 'auditoria' ? 'active' : '' ?>">
+                    <?= icono('historial', 'nav-link-icon') ?>
+                    Auditoría
+                </a>
                 <?php endif; ?>
-                <a href="notificaciones.php" class="nav-link">
+                <a href="notificaciones.php" class="nav-link <?= $activePage === 'notificaciones' ? 'active' : '' ?>">
                     <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -161,7 +207,7 @@ function renderSidebar($activePage = '') {
             <h1 class="header-title">
                 <?php 
                 switch($activePage) {
-                    case 'panel': echo 'Dashboard'; break;
+                    case 'panel': echo $rolId === 3 ? 'Mi espacio médico' : 'Inicio'; break;
                     case 'pacientes': echo 'Gestión de Pacientes'; break;
                     case 'medicos': echo 'Gestión de Médicos'; break;
                     case 'especialidades': echo 'Gestión de Especialidades'; break;
@@ -169,6 +215,16 @@ function renderSidebar($activePage = '') {
                     case 'citas': echo 'Citas Médicas'; break;
                     case 'agenda': echo 'Agenda Médica'; break;
                     case 'reportes': echo 'Reportes'; break;
+                    case 'auditoria': echo 'Auditoría'; break;
+                    case 'mis_citas': echo 'Mis citas'; break;
+                    case 'paciente_perfil': echo 'Mi perfil'; break;
+                    case 'nueva_cita': echo 'Solicitar cita'; break;
+                    case 'pagos': echo 'Pagos y caja'; break;
+                    case 'metodos_pago': echo 'Métodos de pago'; break;
+                    case 'usuarios': echo 'Usuarios e invitaciones'; break;
+                    case 'medico_pacientes': echo 'Mis pacientes'; break;
+                    case 'medico_perfil': echo 'Mi perfil profesional'; break;
+                    case 'notificaciones': echo 'Notificaciones'; break;
                     default: echo 'Clínica Vida Salud'; break;
                 }
                 ?>
@@ -183,7 +239,7 @@ function renderSidebar($activePage = '') {
                 </div>
             </div>
         </header>
-        <main class="page-content">
+        <main class="page-content" id="contenido-principal" tabindex="-1">
 <?php
 }
 

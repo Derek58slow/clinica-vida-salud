@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $rolId = (int) ($_SESSION['rol_id'] ?? 0);
 
-if (!in_array($rolId, [1, 2], true)) {
+if (!in_array($rolId, [1, 2, 4], true)) {
     http_response_code(403);
     exit('No tienes permiso para agendar citas.');
 }
@@ -27,7 +27,15 @@ $horaSeleccionada = trim($_GET['hora'] ?? '');
 
 try {
     $pdo = conectarBD();
-    $pacientes = $pdo->query("SELECT id, nombres, apellidos, documento_identidad FROM pacientes WHERE activo = TRUE ORDER BY apellidos, nombres")->fetchAll();
+    if ($rolId === 4) {
+        $stmtPaciente = $pdo->prepare("SELECT id, nombres, apellidos, documento_identidad FROM pacientes WHERE usuario_id=:usuario_id AND activo=TRUE");
+        $stmtPaciente->execute(['usuario_id'=>$_SESSION['usuario_id']]);
+        $pacientePropio = $stmtPaciente->fetch();
+        $pacientes = $pacientePropio ? [$pacientePropio] : [];
+        $pacienteId = $pacientePropio['id'] ?? null;
+    } else {
+        $pacientes = $pdo->query("SELECT id, nombres, apellidos, documento_identidad FROM pacientes WHERE activo = TRUE ORDER BY apellidos, nombres")->fetchAll();
+    }
     $especialidades = $pdo->query("SELECT id, nombre FROM especialidades WHERE activo = TRUE ORDER BY nombre")->fetchAll();
     $medicos = [];
 
@@ -62,7 +70,7 @@ try {
 
 $horariosDisponibles = [];
 
-if ($medicoId && $fecha) {
+if ($medicoId && fechaClinicaValida($fecha)) {
     try {
         $pdo2 = conectarBD();
         $diaSemana = (int)date('N', strtotime($fecha));
@@ -90,10 +98,6 @@ if ($medicoId && $fecha) {
                 $horaSlot = date('H:i', $t);
                 $slotInicio = $t;
                 $slotFin = $slotInicio + $intervalo;
-                if ($slotFin > $fin) {
-                    continue;
-                }
-                
                 if ($slotFin > $fin) {
                     continue;
                 }
@@ -135,20 +139,65 @@ if ($medicoId && $fecha) {
 }
 
 require_once __DIR__ . '/includes/layout.php';
-renderSidebar('citas');
+renderSidebar($rolId === 4 ? 'nueva_cita' : 'citas');
+
+if ($rolId === 4) {
+    $especialidadSeleccionada = null;
+    foreach ($especialidades as $item) if ((int)$item['id'] === (int)$especialidadId) $especialidadSeleccionada = $item;
+    $medicoSeleccionado = null;
+    foreach ($medicos as $item) if ((int)$item['id'] === (int)$medicoId) $medicoSeleccionado = $item;
+    $pasoActual = !$especialidadSeleccionada ? 1 : (!$medicoSeleccionado ? 2 : (!fechaClinicaValida($fecha) ? 3 : (!$horaSeleccionada ? 4 : 5)));
+    $baseEspecialidad = 'nueva_cita.php?especialidad_id=' . (int)$especialidadId;
+    $baseMedico = $baseEspecialidad . '&medico_id=' . (int)$medicoId;
+?>
+<div class="patient-wizard">
+    <div class="doctor-page-heading"><div><span class="doctor-eyebrow">Solicitud de atención</span><h1>Nueva cita médica</h1><p>Completa un paso a la vez. Podrás revisar todo antes de confirmar.</p></div><a class="btn btn-secondary" href="mis_citas.php">Salir</a></div>
+    <ol class="booking-steps" aria-label="Progreso de la reserva"><?php foreach ([1=>'Especialidad',2=>'Médico',3=>'Fecha',4=>'Horario',5=>'Confirmar'] as $numero=>$nombre): ?><li class="<?= $numero < $pasoActual ? 'is-done' : ($numero === $pasoActual ? 'is-current' : '') ?>"><span><?= $numero < $pasoActual ? '✓' : $numero ?></span><small><?= $nombre ?></small></li><?php endforeach; ?></ol>
+    <?php if (isset($_GET['error'])): ?><div class="alert alert-error">No fue posible registrar la cita. Revisa la disponibilidad e inténtalo nuevamente.</div><?php endif; ?>
+    <section class="card wizard-card">
+    <?php if ($pasoActual === 1): ?>
+        <div class="wizard-heading"><span class="section-icon blue"><?= icono('medico') ?></span><div><span>Paso 1 de 5</span><h2>Elige una especialidad</h2><p>Selecciona el área médica que necesitas.</p></div></div>
+        <div class="wizard-choice-list"><?php foreach($especialidades as $esp): ?><a href="nueva_cita.php?especialidad_id=<?= (int)$esp['id'] ?>"><span class="choice-symbol"><?= icono('atendida') ?></span><span><strong><?= h($esp['nombre']) ?></strong><small>Consultar médicos disponibles</small></span><?= icono('flecha') ?></a><?php endforeach; ?></div>
+    <?php elseif ($pasoActual === 2): ?>
+        <div class="wizard-heading"><span class="section-icon coral"><?= icono('medico') ?></span><div><span>Paso 2 de 5 · <?= h($especialidadSeleccionada['nombre']) ?></span><h2>Elige tu médico</h2><p>Solo aparecen profesionales de la especialidad seleccionada.</p></div></div>
+        <?php if(!$medicos): ?><div class="empty-state">No hay médicos activos para esta especialidad.</div><?php else: ?><div class="wizard-choice-list"><?php foreach($medicos as $m): ?><a href="<?= h($baseEspecialidad.'&medico_id='.(int)$m['id']) ?>"><span class="patient-avatar"><?= h(strtoupper(substr($m['nombres'],0,1).substr($m['apellidos'],0,1))) ?></span><span><strong>Dr(a). <?= h($m['nombres'].' '.$m['apellidos']) ?></strong><small><?= h($especialidadSeleccionada['nombre']) ?></small></span><?= icono('flecha') ?></a><?php endforeach; ?></div><?php endif; ?>
+        <div class="wizard-footer"><a class="btn btn-secondary" href="nueva_cita.php">← Cambiar especialidad</a></div>
+    <?php elseif ($pasoActual === 3): ?>
+        <div class="wizard-heading"><span class="section-icon lilac"><?= icono('agenda') ?></span><div><span>Paso 3 de 5</span><h2>Elige la fecha</h2><p><?= h($especialidadSeleccionada['nombre']) ?> con Dr(a). <?= h($medicoSeleccionado['nombres'].' '.$medicoSeleccionado['apellidos']) ?></p></div></div>
+        <form method="GET" class="wizard-single-form"><input type="hidden" name="especialidad_id" value="<?= (int)$especialidadId ?>"><input type="hidden" name="medico_id" value="<?= (int)$medicoId ?>"><div class="form-group"><label class="form-label required" for="wizard-fecha">Fecha de atención</label><input class="form-input" id="wizard-fecha" type="date" name="fecha" min="<?= date('Y-m-d') ?>" required></div><button class="btn btn-primary" type="submit">Consultar horarios disponibles <?= icono('flecha') ?></button></form>
+        <div class="wizard-footer"><a class="btn btn-secondary" href="<?= h($baseEspecialidad) ?>">← Cambiar médico</a></div>
+    <?php elseif ($pasoActual === 4): ?>
+        <div class="wizard-heading"><span class="section-icon green"><?= icono('reloj') ?></span><div><span>Paso 4 de 5 · <?= date('d/m/Y',strtotime($fecha)) ?></span><h2>Elige un horario</h2><p>Se muestran únicamente espacios disponibles.</p></div></div>
+        <?php if(!$horariosDisponibles): ?><div class="empty-state"><strong>No hay horarios para esta fecha.</strong><p>Vuelve y selecciona otro día.</p></div><?php else: ?><div class="wizard-time-grid"><?php foreach($horariosDisponibles as $hora): ?><a href="<?= h($baseMedico.'&fecha='.urlencode($fecha).'&hora='.urlencode($hora)) ?>"><strong><?= h($hora) ?></strong><small>Disponible</small></a><?php endforeach; ?></div><?php endif; ?>
+        <div class="wizard-footer"><a class="btn btn-secondary" href="<?= h($baseMedico) ?>">← Cambiar fecha</a></div>
+    <?php else: ?>
+        <div class="wizard-heading"><span class="section-icon green"><?= icono('atendida') ?></span><div><span>Paso 5 de 5</span><h2>Confirma tu solicitud</h2><p>Revisa los datos antes de registrar la cita.</p></div></div>
+        <div class="wizard-summary"><div><span>Especialidad</span><strong><?= h($especialidadSeleccionada['nombre']) ?></strong></div><div><span>Médico</span><strong>Dr(a). <?= h($medicoSeleccionado['nombres'].' '.$medicoSeleccionado['apellidos']) ?></strong></div><div><span>Fecha</span><strong><?= date('d/m/Y',strtotime($fecha)) ?></strong></div><div><span>Hora</span><strong><?= h($horaSeleccionada) ?></strong></div></div>
+        <form action="guardar_cita.php" method="POST" class="stack"><input type="hidden" name="csrf_token" value="<?= h($_SESSION['csrf_token']) ?>"><input type="hidden" name="paciente_id" value="<?= (int)$pacienteId ?>"><input type="hidden" name="especialidad_id" value="<?= (int)$especialidadId ?>"><input type="hidden" name="medico_id" value="<?= (int)$medicoId ?>"><input type="hidden" name="fecha" value="<?= h($fecha) ?>"><input type="hidden" name="hora_inicio" value="<?= h($horaSeleccionada) ?>"><div class="form-grid"><div class="form-group"><label class="form-label" for="wizard-modalidad">Modalidad</label><select class="form-select" id="wizard-modalidad" name="modalidad"><option value="presencial">Presencial</option><option value="virtual">Virtual</option></select></div><div class="form-group"><label class="form-label" for="wizard-motivo">Motivo de consulta (opcional)</label><textarea class="form-textarea" id="wizard-motivo" name="motivo" maxlength="1000" rows="3" placeholder="Describe brevemente el motivo"></textarea></div></div><button class="btn btn-primary wizard-confirm" type="submit"><?= icono('atendida') ?> Confirmar solicitud de cita</button></form>
+        <div class="wizard-footer"><a class="btn btn-secondary" href="<?= h($baseMedico.'&fecha='.urlencode($fecha)) ?>">← Cambiar horario</a></div>
+    <?php endif; ?>
+    </section>
+</div>
+<?php renderFooter(); exit; }
 ?>
 
-<div style="margin-bottom: 24px; max-width: 900px; margin-left: auto; margin-right: auto;">
+<div class="patient-booking-shell">
+<div style="margin-bottom: 24px;">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
         <div>
             <h1 style="font-size: 26px; font-weight: 700; color: var(--color-text); margin-bottom: 6px;">Nueva cita médica</h1>
             <p style="color: var(--color-text-light); font-size: 14px;">Solo se muestran horarios disponibles</p>
         </div>
-        <a href="citas_moderno.php" class="btn btn-secondary">Volver al listado</a>
+        <a href="<?= $rolId === 4 ? 'mis_citas.php' : 'citas_moderno.php' ?>" class="btn btn-secondary">Volver</a>
     </div>
 </div>
 
-<div class="card" style="max-width: 900px; margin: 0 auto; box-shadow: var(--shadow-lg);">
+<?php $pasoActual = !$especialidadId ? 1 : (!$medicoId ? 2 : (!$fecha ? 3 : (empty($horariosDisponibles) || !$horaSeleccionada ? 4 : 5))); ?>
+<ol class="booking-steps" aria-label="Progreso de la reserva">
+    <?php foreach ([1=>'Especialidad',2=>'Médico',3=>'Fecha',4=>'Horario',5=>'Confirmar'] as $numero=>$nombre): ?><li class="<?= $numero < $pasoActual ? 'is-done' : ($numero === $pasoActual ? 'is-current' : '') ?>"><span><?= $numero < $pasoActual ? '✓' : $numero ?></span><small><?= $nombre ?></small></li><?php endforeach; ?>
+</ol>
+
+<div class="card booking-card">
     <div class="card-body">
         <?php if (isset($_GET['error'])): ?>
             <div class="alert alert-error">
@@ -174,16 +223,21 @@ renderSidebar('citas');
             <div style="margin-bottom: 28px;">
                 <h3 style="font-size: 17px; font-weight: 600; margin-bottom: 16px;">Datos de la cita</h3>
                 <div class="form-grid">
-                    <div class="form-group">
+                    <div class="form-group <?= $rolId === 4 ? 'form-span-2' : '' ?>">
                         <label class="form-label required">Paciente</label>
+                        <?php if ($rolId === 4 && !empty($pacientes)): ?>
+                            <input type="hidden" name="paciente_id" value="<?= (int)$pacienteId ?>">
+                            <div class="booking-patient-card"><span class="patient-avatar"><?= h(strtoupper(substr($pacientes[0]['nombres'],0,1).substr($pacientes[0]['apellidos'],0,1))) ?></span><span><small>Reserva para</small><strong><?= h($pacientes[0]['nombres'].' '.$pacientes[0]['apellidos']) ?></strong><em><?= h($pacientes[0]['documento_identidad'] ?: 'Documento no registrado') ?></em></span></div>
+                        <?php else: ?>
                         <select name="paciente_id" class="form-select" style="height: 44px;" required>
                             <option value="">Seleccionar paciente</option>
                             <?php foreach ($pacientes as $p): ?>
                                 <option value="<?= (int)$p['id'] ?>" <?= ($pacienteId == $p['id']) ? 'selected' : '' ?>><?= htmlspecialchars($p['apellidos'].', '.$p['nombres'].' ('.$p['documento_identidad'].')') ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <?php endif; ?>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group <?= $rolId === 4 ? 'form-span-2' : '' ?>">
                         <label class="form-label required">Especialidad</label>
                         <select name="especialidad_id" id="especialidad_id" class="form-select" style="height: 44px;" required onchange="actualizarEspecialidad()">
                             <option value="">Seleccionar especialidad</option>
@@ -253,11 +307,12 @@ renderSidebar('citas');
             </div>
             
             <div style="display: flex; gap: 12px; margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--color-border);">
-                <button type="submit" class="btn btn-primary" style="padding: 11px 26px;">Agendar cita</button>
-                <a href="citas_moderno.php" class="btn btn-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-primary" style="padding: 11px 26px;" <?= (!$medicoId || !$fecha || empty($horariosDisponibles)) ? 'disabled' : '' ?>><?= $rolId === 4 ? 'Confirmar solicitud' : 'Agendar cita' ?></button>
+                <a href="<?= $rolId === 4 ? 'mis_citas.php' : 'citas_moderno.php' ?>" class="btn btn-secondary">Cancelar</a>
             </div>
         </form>
     </div>
+</div>
 </div>
 
 <script>

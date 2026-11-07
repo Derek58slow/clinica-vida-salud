@@ -4,6 +4,8 @@
 /vendor/
 /node_modules/
 /tmp/
+/output/
+/database/backups/
 .vscode/settings.json
 *.log
 .DS_Store

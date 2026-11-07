@@ -4,6 +4,27 @@
     const opened = new Set();
     const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     const weekdays = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
+    let controlId = 0;
+    const connectLabel = (input, trigger) => {
+        const label = input.labels && input.labels[0];
+        if (label) {
+            if (!label.id) label.id = `control-label-${++controlId}`;
+            const value = trigger.querySelector('.pretty-control-value');
+            if (value) value.id = `control-value-${++controlId}`;
+            trigger.setAttribute('aria-labelledby', label.id + (value ? ` ${value.id}` : ''));
+            label.addEventListener('click', (event) => { event.preventDefault(); trigger.focus(); });
+        } else {
+            trigger.setAttribute('aria-label', input.getAttribute('aria-label') || input.name || 'Seleccionar');
+        }
+        input.tabIndex = -1;
+        input.setAttribute('aria-hidden', 'true');
+        input.addEventListener('invalid', (event) => {
+            event.preventDefault();
+            trigger.focus();
+            trigger.setAttribute('aria-invalid', 'true');
+        });
+        input.addEventListener('change', () => trigger.removeAttribute('aria-invalid'));
+    };
 
     const closeAll = (except = null) => {
         opened.forEach((close) => {
@@ -45,10 +66,13 @@
         trigger.setAttribute('aria-expanded', 'false');
         trigger.innerHTML = '<span class="pretty-control-value"></span><svg class="pretty-control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>';
         wrapper.appendChild(trigger);
+        connectLabel(select, trigger);
 
         const menu = document.createElement('div');
         menu.className = 'pretty-select-menu';
         menu.setAttribute('role', 'listbox');
+        menu.id = `select-options-${++controlId}`;
+        trigger.setAttribute('aria-controls', menu.id);
         menu.hidden = true;
         document.body.appendChild(menu);
 
@@ -95,6 +119,26 @@
             wrapper.classList.add('is-open');
             trigger.setAttribute('aria-expanded', 'true');
             positionPopup(trigger, menu, trigger.getBoundingClientRect().width);
+            const selected = menu.querySelector('[aria-selected="true"]:not(:disabled)') || menu.querySelector('button:not(:disabled)');
+            if (selected) selected.focus();
+        });
+
+        trigger.addEventListener('keydown', (event) => {
+            if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); trigger.click(); }
+        });
+        menu.addEventListener('keydown', (event) => {
+            const items = Array.from(menu.querySelectorAll('button:not(:disabled)'));
+            const index = items.indexOf(document.activeElement);
+            let next = index;
+            if (event.key === 'ArrowDown') next = (index + 1) % items.length;
+            else if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+            else if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = items.length - 1;
+            else if (event.key === 'Escape') { event.preventDefault(); close(); trigger.focus(); return; }
+            else if (event.key === 'Tab') { close(); trigger.focus(); return; }
+            else return;
+            event.preventDefault();
+            if (items[next]) items[next].focus();
         });
 
         select.addEventListener('change', refresh);
@@ -129,10 +173,13 @@
         trigger.setAttribute('aria-expanded', 'false');
         trigger.innerHTML = '<span class="pretty-control-value"></span><svg class="pretty-control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"></rect><line x1="16" y1="3" x2="16" y2="7"></line><line x1="8" y1="3" x2="8" y2="7"></line><line x1="3" y1="11" x2="21" y2="11"></line></svg>';
         wrapper.appendChild(trigger);
+        connectLabel(input, trigger);
 
         const calendar = document.createElement('div');
         calendar.className = 'pretty-calendar';
         calendar.setAttribute('role', 'dialog');
+        calendar.id = `calendar-${++controlId}`;
+        trigger.setAttribute('aria-controls', calendar.id);
         calendar.setAttribute('aria-label', 'Seleccionar fecha');
         calendar.hidden = true;
         calendar.innerHTML = `
@@ -259,6 +306,16 @@
             calendar.hidden = false;
             trigger.setAttribute('aria-expanded', 'true');
             positionPopup(trigger, calendar, 324);
+            const day = calendar.querySelector('.is-selected:not(:disabled), .is-today:not(:disabled), .calendar-day:not(:disabled)');
+            if (day) day.focus();
+        });
+        calendar.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') { close(); trigger.focus(); }
+            const days = Array.from(calendar.querySelectorAll('.calendar-day:not(:disabled)'));
+            const index = days.indexOf(document.activeElement);
+            if (index < 0) return;
+            const steps = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+            if (event.key in steps) { event.preventDefault(); const next=days[index+steps[event.key]]; if(next) next.focus(); }
         });
 
         previousButton.addEventListener('click', () => {
@@ -305,4 +362,15 @@
 
     document.querySelectorAll('select.form-select').forEach(enhanceSelect);
     document.querySelectorAll('input.form-input[type="date"]').forEach(enhanceDate);
+    document.querySelectorAll('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => { if (!window.confirm(form.dataset.confirm)) event.preventDefault(); });
+    });
+    const openTarget = () => {
+        if (window.location.hash === '#editar-informacion') {
+            const editor = document.getElementById('editar-informacion');
+            if (editor) editor.open = true;
+        }
+    };
+    window.addEventListener('hashchange', openTarget);
+    openTarget();
 })();

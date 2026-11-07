@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $rolId = (int) ($_SESSION['rol_id'] ?? 0);
 
-if (!in_array($rolId, [1, 2, 3], true)) {
+if ($rolId !== 1) {
     http_response_code(403);
     exit('No tienes permiso.');
 }
@@ -61,7 +61,7 @@ renderSidebar('horarios');
         <?php if (isset($_GET['error'])): ?>
             <div class="alert alert-error">
                 <?php
-                $e = ['datos'=>'Revisa los datos.','rango'=>'La hora fin debe ser posterior a la hora inicio.','superpuesto'=>'Ya existe un horario superpuesto para este médico en el mismo día.','servidor'=>'No se pudo actualizar.'];
+                $e = ['citas'=>'Este horario tiene citas activas pendientes. Reprograma o cancela esas citas antes de modificarlo.','datos'=>'Revisa los datos.','rango'=>'La hora fin debe ser posterior a la hora inicio.','superpuesto'=>'Ya existe un horario superpuesto para este médico en el mismo día.','servidor'=>'No se pudo actualizar.'];
                 echo htmlspecialchars($e[$_GET['error']] ?? 'Error al guardar.');
                 ?>
             </div>

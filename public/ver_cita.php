@@ -8,12 +8,14 @@ if (!isset($_SESSION["usuario_id"])) {
 
 $id = filter_input(INPUT_GET, "id", FILTER_VALIDATE_INT);
 if (!$id) {
-    header("Location: citas_moderno.php");
+    http_response_code(404);
+    echo 'La cita solicitada no existe.';
     exit;
 }
 
 require_once __DIR__ . "/../config/database.php";
 require_once __DIR__ . "/includes/layout.php";
+require_once __DIR__ . '/includes/panel_helpers.php';
 
 $pdo = conectarBD();
 $stmt = $pdo->prepare("SELECT c.*, p.nombres AS pac_nombres, p.apellidos AS pac_apellidos, p.documento_identidad, p.telefono AS pac_telefono, p.correo AS pac_correo,
@@ -28,16 +30,21 @@ $stmt = $pdo->prepare("SELECT c.*, p.nombres AS pac_nombres, p.apellidos AS pac_
 $stmt->execute(["id" => $id]);
 $cita = $stmt->fetch();
 if (!$cita) {
-    header("Location: citas_moderno.php");
+    http_response_code(404);
+    echo 'La cita solicitada no existe.';
     exit;
 }
 
 $rolId = (int)($_SESSION["rol_id"] ?? 0);
+if (!in_array($rolId, [1, 2, 3, 4], true)) {
+    http_response_code(403);
+    exit("No tienes permiso para ver esta cita.");
+}
 if (empty($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
 }
 if ($rolId === 3) {
-    $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u");
+    $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u AND activo = TRUE");
     $stm->execute(["u" => $_SESSION["usuario_id"]]);
     $mp = $stm->fetch();
     if (!$mp || (int)$mp["id"] !== (int)$cita["medico_id"]) {
@@ -45,26 +52,47 @@ if ($rolId === 3) {
         exit("No tienes permiso para ver esta cita.");
     }
 }
+if ($rolId === 4) {
+    $stm = $pdo->prepare("SELECT id FROM pacientes WHERE usuario_id = :u AND activo = TRUE");
+    $stm->execute(["u" => $_SESSION["usuario_id"]]);
+    $pacientePropio = $stm->fetch();
+    if (!$pacientePropio || (int)$pacientePropio["id"] !== (int)$cita["paciente_id"]) {
+        http_response_code(403);
+        exit("No tienes permiso para ver esta cita.");
+    }
+}
 
-$histStmt = $pdo->prepare("SELECT h.*, u.nombre AS usuario_nombre FROM historial_citas h LEFT JOIN usuarios u ON u.id = h.usuario_id WHERE h.cita_id = :id ORDER BY h.created_at ASC");
+$histStmt = $pdo->prepare("SELECT h.*, u.nombre AS usuario_nombre FROM historial_citas h LEFT JOIN usuarios u ON u.id = h.usuario_id WHERE h.cita_id = :id ORDER BY h.created_at DESC,h.id DESC LIMIT 100");
 $histStmt->execute(["id" => $id]);
 $historial = $histStmt->fetchAll();
+$contexto = contextoAgenda($_GET + ['fecha'=>substr($cita['inicio'],0,10)]);
+parse_str($contexto, $camposContexto);
+$puedeRegistrarAsistencia = transicionCitaPermitida($cita['estado'], 'completada', $rolId, new DateTimeImmutable($cita['inicio']));
 
-renderSidebar("citas");
+renderSidebar($rolId === 4 ? "mis_citas" : ($rolId === 3 ? "agenda" : "citas"));
 ?>
-<div style="max-width: 1000px; margin: 0 auto;">
+<div class="appointment-detail">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
         <div>
-            <h1 style="font-size: 26px; font-weight: 700;">Detalle de Cita</h1>
+            <span class="doctor-eyebrow">Información de la atención</span>
+            <h1 class="page-heading-title">Detalle de cita</h1>
             <p style="color: var(--color-text-light);"><?= htmlspecialchars($cita["codigo_cita"]) ?></p>
         </div>
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <a href="agenda.php" class="btn btn-secondary">Volver a Agenda</a>
-            <a href="citas_moderno.php" class="btn btn-secondary">Listado</a>
-            <?php if (in_array($rolId, [1,2]) && !in_array($cita["estado"], ["completada","cancelada"], true)): ?>
+            <?php if ($rolId === 3): ?>
+                <a href="agenda.php?<?= h($contexto) ?>" class="btn btn-secondary"><?= icono('volver') ?> Volver a mi agenda</a>
+                <a href="medico_paciente.php?id=<?= (int)$cita['paciente_id'] ?>" class="btn btn-primary"><?= icono('pacientes') ?> Ficha del paciente</a>
+            <?php elseif ($rolId === 4): ?>
+                <a href="mis_citas.php" class="btn btn-secondary">Volver a mis citas</a>
+                <a href="comprobante_cita.php?id=<?= (int)$id ?>" target="_blank" class="btn btn-primary"><?= icono('historial') ?> Ver comprobante PDF</a>
+            <?php else: ?>
+                <a href="agenda.php" class="btn btn-secondary">Volver a Agenda</a>
+                <a href="citas_moderno.php" class="btn btn-secondary">Listado</a>
+            <?php endif; ?>
+            <?php if (in_array($rolId, [1,2,4], true) && in_array($cita["estado"], ["solicitada","confirmada"], true) && strtotime($cita['inicio']) > time()): ?>
                 <a href="reprogramar_cita.php?id=<?= (int)$id ?>" class="btn btn-primary">Reprogramar</a>
             <?php endif; ?>
-            <?php if (in_array($rolId, [1,2]) && $cita["estado"] !== "cancelada" && $cita["estado"] !== "completada"): ?>
+            <?php if (in_array($rolId, [1,2,4], true) && in_array($cita["estado"], ["solicitada","confirmada"], true) && strtotime($cita['inicio']) > time()): ?>
                 <a href="cancelar_cita.php?id=<?= (int)$id ?>" class="btn" style="background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5;">Cancelar</a>
             <?php endif; ?>
         </div>
@@ -82,7 +110,7 @@ renderSidebar("citas");
     <?php if (isset($_GET["error"])): ?>
         <div class="alert alert-error" style="margin-bottom: 16px;">
             <?php
-            $e = ["no_reprogramar" => "Solo se pueden reprogramar citas solicitadas o confirmadas.", "no_cancelar" => "Solo se pueden cancelar citas solicitadas o confirmadas.", "transicion" => "Transición de estado no permitida.", "estado" => "Estado inválido.", "servidor" => "Error al procesar la solicitud."];
+            $e = ["fecha" => "No se puede registrar atención ni inasistencia antes del inicio de la cita.", "no_reprogramar" => "Solo se pueden reprogramar citas solicitadas o confirmadas.", "no_cancelar" => "Solo se pueden cancelar citas solicitadas o confirmadas.", "transicion" => "Transición de estado no permitida.", "estado" => "Estado inválido.", "servidor" => "Error al procesar la solicitud."];
             echo htmlspecialchars($e[$_GET["error"]] ?? "Error.");
             ?>
         </div>
@@ -96,7 +124,7 @@ renderSidebar("citas");
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
                 <div>
                     <div style="color: var(--color-text-light); font-size: 12px; text-transform: uppercase; margin-bottom: 4px;">Estado</div>
-                    <div style="font-weight: 600; text-transform: capitalize;"><?= str_replace("_", " ", $cita["estado"]) ?></div>
+                    <span class="badge badge-<?= estadoBadge($cita['estado']) ?>"><?= nombreEstado($cita['estado']) ?></span>
                 </div>
                 <div>
                     <div style="color: var(--color-text-light); font-size: 12px; text-transform: uppercase; margin-bottom: 4px;">Fecha y Hora</div>
@@ -136,36 +164,43 @@ renderSidebar("citas");
         </div>
     </div>
 
-    <?php if (in_array($rolId, [1,2,3]) && $cita["estado"] !== "cancelada" && $cita["estado"] !== "completada"): ?>
+    <?php if (in_array($rolId, [1,2,3]) && in_array($cita["estado"], ['solicitada','confirmada'], true)): ?>
     <div class="card" style="margin-bottom: 24px;">
         <div class="card-header">
-            <h2 class="card-title">Cambiar Estado</h2>
+            <div class="section-title"><span class="section-icon blue"><?= icono('atendida') ?></span><h2 class="card-title">Seguimiento de la cita</h2></div>
         </div>
         <div class="card-body">
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <?php if ($rolId === 3 && $cita['estado'] === 'solicitada'): ?><p class="form-hint">Esta cita está pendiente de confirmación por recepción. La asistencia podrá registrarse cuando esté confirmada y haya llegado su hora de inicio.</p><?php endif; ?>
+            <?php if ($cita['estado'] === 'confirmada' && !$puedeRegistrarAsistencia): ?><p class="form-hint">La cita está confirmada. Podrás registrar atención o inasistencia a partir del <?= date('d/m/Y H:i',strtotime($cita['inicio'])) ?>.</p><?php endif; ?>
+            <div class="action-row">
                 <?php if ($cita["estado"] === "solicitada"): ?>
                     <?php if (in_array($rolId, [1,2], true)): ?>
                     <form method="POST" action="cambiar_estado_cita.php">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION["csrf_token"]) ?>">
                         <input type="hidden" name="id" value="<?= (int)$id ?>">
                         <input type="hidden" name="estado" value="confirmada">
+                        <?php foreach ($camposContexto as $campo=>$valor): ?><input type="hidden" name="<?= h($campo) ?>" value="<?= h((string)$valor) ?>"><?php endforeach; ?>
                         <button type="submit" class="btn btn-primary">Marcar como Confirmada</button>
                     </form>
                     <a href="cancelar_cita.php?id=<?= (int)$id ?>" class="btn" style="background: #FEE2E2; color: #991B1B;">Cancelar</a>
                     <?php endif; ?>
                 <?php elseif ($cita["estado"] === "confirmada"): ?>
+                    <?php if ($puedeRegistrarAsistencia): ?>
                     <form method="POST" action="cambiar_estado_cita.php">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION["csrf_token"]) ?>">
                         <input type="hidden" name="id" value="<?= (int)$id ?>">
                         <input type="hidden" name="estado" value="completada">
-                        <button type="submit" class="btn btn-primary">Marcar como Atendida</button>
+                        <?php foreach ($camposContexto as $campo=>$valor): ?><input type="hidden" name="<?= h($campo) ?>" value="<?= h((string)$valor) ?>"><?php endforeach; ?>
+                        <button type="submit" class="btn btn-primary"><?= icono('atendida') ?> Marcar como atendida</button>
                     </form>
-                    <form method="POST" action="cambiar_estado_cita.php">
+                    <form method="POST" action="cambiar_estado_cita.php" data-confirm="¿Confirmas que este paciente no asistió? La cita quedará cerrada como inasistencia.">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION["csrf_token"]) ?>">
                         <input type="hidden" name="id" value="<?= (int)$id ?>">
                         <input type="hidden" name="estado" value="no_asistio">
-                        <button type="submit" class="btn" style="background: #FEF3C7; color: #92400E;">Marcar No Asistió</button>
+                        <?php foreach ($camposContexto as $campo=>$valor): ?><input type="hidden" name="<?= h($campo) ?>" value="<?= h((string)$valor) ?>"><?php endforeach; ?>
+                        <button type="submit" class="btn btn-warning"><?= icono('ausencia') ?> Registrar inasistencia</button>
                     </form>
+                    <?php endif; ?>
                     <?php if (in_array($rolId, [1,2], true)): ?>
                     <a href="cancelar_cita.php?id=<?= (int)$id ?>" class="btn" style="background: #FEE2E2; color: #991B1B;">Cancelar</a>
                     <?php endif; ?>

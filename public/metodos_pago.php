@@ -1,0 +1,43 @@
+<?php
+require_once __DIR__.'/includes/panel_helpers.php';
+exigirRol([4]);
+require_once __DIR__.'/../config/database.php';
+$config=null;$error=false;
+try{$pdo=conectarBD();$config=$pdo->query('SELECT banco,titular,instrucciones,qr_imagen FROM configuracion_pagos WHERE id=1')->fetch();}
+catch(Throwable $e){error_log($e->getMessage());$error=true;}
+require_once __DIR__.'/includes/layout.php';
+renderSidebar('metodos_pago');
+?>
+<div class="doctor-page-heading payment-page-heading"><div class="section-title"><span class="page-emblem green"><?= icono('atendida') ?></span><div><span class="doctor-eyebrow">Pagos de la clínica</span><h1>Elige cómo deseas pagar</h1><p>Selecciona un método y completa los datos solicitados.</p></div></div><span class="secure-payment-label"><?= icono('escudo') ?> Datos protegidos</span></div>
+<?php if($error):?><div class="alert alert-error">No se pudo cargar la configuración de pagos.</div><?php else:?>
+<div class="payment-checkout-layout">
+<aside class="card payment-method-card"><div class="card-header"><div><h2 class="card-title">Métodos de pago</h2><p class="card-subtitle">Selecciona una alternativa</p></div></div><div class="card-body payment-method-selector">
+<button class="payment-method-option is-active" type="button" data-payment-method="card"><span class="payment-brand brand-card"><i></i><i></i></span><span><strong>Tarjeta</strong><small>Crédito o débito</small></span><em>Visa · Mastercard</em></button>
+<button class="payment-method-option" type="button" data-payment-method="paypal"><span class="payment-brand brand-paypal">P</span><span><strong>PayPal</strong><small>Cuenta o tarjeta asociada</small></span><em>PayPal</em></button>
+<button class="payment-method-option" type="button" data-payment-method="wallet"><span class="payment-brand brand-wallet"><?= icono('perfil') ?></span><span><strong>Billetera móvil</strong><small>Pago mediante celular</small></span><em>Tigo Money</em></button>
+<button class="payment-method-option" type="button" data-payment-method="qr"><span class="payment-brand brand-qr"><?= icono('agenda') ?></span><span><strong>QR bancario</strong><small>Escanea desde tu banco</small></span><em>Transferencia</em></button>
+</div><div class="payment-trust"><span><?= icono('escudo') ?></span><div><strong>Pago organizado</strong><small>La información escrita en esta demostración no se guarda en la base de datos.</small></div></div></aside>
+<section class="card checkout-card"><div class="card-header checkout-header"><div><span class="doctor-eyebrow">Finalizar pago</span><h2 class="card-title" id="payment-panel-title">Pago con tarjeta</h2></div><div class="accepted-cards" aria-label="Tarjetas aceptadas"><b>VISA</b><span class="mastercard-mini"><i></i><i></i></span><b>AMEX</b></div></div><div class="card-body">
+<div class="payment-amount"><span>Total a pagar</span><strong>Bs <input id="payment-amount" type="number" min="1" step="0.01" value="150.00" aria-label="Monto a pagar"></strong></div>
+<form class="payment-panel is-active" data-payment-panel="card" autocomplete="off"><div class="form-group"><label class="form-label required" for="card-holder">Nombre del titular</label><input class="form-input" id="card-holder" maxlength="80" placeholder="Como aparece en la tarjeta" required></div><div class="form-group"><label class="form-label required" for="card-number">Número de tarjeta</label><div class="card-number-field"><span class="mastercard-large"><i></i><i></i></span><input id="card-number" inputmode="numeric" maxlength="19" placeholder="0000 0000 0000 0000" required></div></div><div class="payment-form-row"><div class="form-group"><label class="form-label required" for="card-expiry">Vencimiento</label><input class="form-input" id="card-expiry" inputmode="numeric" maxlength="5" placeholder="MM/AA" required></div><div class="form-group"><label class="form-label required" for="card-cvc">CVC</label><input class="form-input" id="card-cvc" inputmode="numeric" maxlength="4" placeholder="123" required></div></div><button class="btn btn-primary checkout-submit" type="submit"><?= icono('escudo') ?> Confirmar pago de prueba</button></form>
+<form class="payment-panel" data-payment-panel="paypal" autocomplete="off"><div class="provider-hero paypal-hero"><span class="payment-brand brand-paypal">P</span><div><strong>Continuar con PayPal</strong><small>Ingresa el correo asociado a tu cuenta.</small></div></div><div class="form-group"><label class="form-label required" for="paypal-email">Correo electrónico</label><input class="form-input" id="paypal-email" type="email" placeholder="nombre@correo.com" required></div><button class="btn checkout-submit paypal-button" type="submit">Continuar con PayPal</button></form>
+<form class="payment-panel" data-payment-panel="wallet" autocomplete="off"><div class="provider-hero wallet-hero"><span class="payment-brand brand-wallet"><?= icono('perfil') ?></span><div><strong>Billetera móvil</strong><small>Recibirás la solicitud en el número indicado.</small></div></div><div class="form-group"><label class="form-label required" for="wallet-provider">Proveedor</label><select class="form-select" id="wallet-provider" required><option value="">Seleccionar billetera</option><option>Tigo Money</option><option>Yape</option><option>Banco móvil</option></select></div><div class="form-group"><label class="form-label required" for="wallet-phone">Número de celular</label><input class="form-input" id="wallet-phone" inputmode="tel" maxlength="12" placeholder="Ej.: 70000000" required></div><button class="btn btn-primary checkout-submit" type="submit">Enviar solicitud de prueba</button></form>
+<div class="payment-panel" data-payment-panel="qr"><div class="qr-checkout"><?php if(!empty($config['qr_imagen'])):?><div class="qr-frame"><img src="<?= h($config['qr_imagen']) ?>" alt="QR bancario para pagos de Clínica Vida Salud"></div><div><span class="badge badge-success">Disponible</span><h3><?= h($config['banco']) ?></h3><p><?= h($config['titular']) ?></p><small><?= h($config['instrucciones']?:'Escanea el QR desde la aplicación de tu banco.') ?></small></div><?php else:?><div class="qr-placeholder"><?= icono('agenda') ?><strong>QR pendiente de configuración</strong><span>Administración debe subir el QR bancario.</span></div><?php endif;?></div></div>
+</div></section></div>
+<?php endif;?>
+<dialog class="payment-result-dialog" id="payment-result-dialog"><button class="dialog-close" type="button" aria-label="Cerrar">×</button><span class="payment-result-icon">✓</span><h2>Datos verificados</h2><p>El flujo de pago se completó correctamente para la presentación.</p><div class="payment-result-detail"><span>Importe</span><strong id="result-amount">Bs 0.00</strong></div><small>Simulación académica: no se realizó ningún cargo ni se guardaron datos financieros.</small><button class="btn btn-primary dialog-accept" type="button">Finalizar</button></dialog>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+ const options=[...document.querySelectorAll('[data-payment-method]')],panels=[...document.querySelectorAll('[data-payment-panel]')],title=document.getElementById('payment-panel-title');
+ const titles={card:'Pago con tarjeta',paypal:'Pago con PayPal',wallet:'Pago con billetera móvil',qr:'Pago mediante QR'};
+ options.forEach(option=>option.addEventListener('click',()=>{const method=option.dataset.paymentMethod;options.forEach(x=>x.classList.toggle('is-active',x===option));panels.forEach(x=>x.classList.toggle('is-active',x.dataset.paymentPanel===method));title.textContent=titles[method];}));
+ const card=document.getElementById('card-number'),expiry=document.getElementById('card-expiry'),cvc=document.getElementById('card-cvc'),phone=document.getElementById('wallet-phone');
+ card?.addEventListener('input',()=>card.value=card.value.replace(/\D/g,'').slice(0,16).replace(/(.{4})/g,'$1 ').trim());
+ expiry?.addEventListener('input',()=>{let v=expiry.value.replace(/\D/g,'').slice(0,4);expiry.value=v.length>2?v.slice(0,2)+'/'+v.slice(2):v;});
+ cvc?.addEventListener('input',()=>cvc.value=cvc.value.replace(/\D/g,'').slice(0,4));phone?.addEventListener('input',()=>phone.value=phone.value.replace(/\D/g,'').slice(0,10));
+ const dialog=document.getElementById('payment-result-dialog');
+ document.querySelectorAll('form.payment-panel').forEach(form=>form.addEventListener('submit',event=>{event.preventDefault();if(!form.reportValidity())return;document.getElementById('result-amount').textContent='Bs '+Number(document.getElementById('payment-amount').value||0).toFixed(2);dialog.showModal();}));
+ dialog.querySelectorAll('.dialog-close,.dialog-accept').forEach(button=>button.addEventListener('click',()=>dialog.close()));
+});
+</script>
+<?php renderFooter();?>

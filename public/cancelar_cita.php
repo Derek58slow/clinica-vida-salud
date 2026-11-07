@@ -7,7 +7,7 @@ if (!isset($_SESSION["usuario_id"])) {
 }
 
 $rolId = (int) ($_SESSION["rol_id"] ?? 0);
-if (!in_array($rolId, [1, 2], true)) {
+if (!in_array($rolId, [1, 2, 4], true)) {
     http_response_code(403);
     exit("No tienes permiso.");
 }
@@ -32,6 +32,16 @@ if (!$cita) {
     header("Location: citas_moderno.php");
     exit;
 }
+if ($rolId === 4) {
+    $propietario = $pdo->prepare('SELECT id FROM pacientes WHERE usuario_id=:usuario_id AND activo=TRUE');
+    $propietario->execute(['usuario_id'=>$_SESSION['usuario_id']]);
+    $paciente = $propietario->fetch();
+    if (!$paciente || (int)$paciente['id'] !== (int)$cita['paciente_id']) { http_response_code(403); exit('No tienes permiso para cancelar esta cita.'); }
+}
+if (strtotime($cita['inicio']) <= time()) {
+    header("Location: ver_cita.php?id=$id&error=no_cancelar");
+    exit;
+}
 if (!in_array($cita["estado"], ["solicitada", "confirmada"], true)) {
     header("Location: ver_cita.php?id=$id&error=no_cancelar");
     exit;
@@ -50,6 +60,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
     try {
         $pdo->beginTransaction();
+        establecerActorAuditoria($pdo, (int)$_SESSION['usuario_id']);
         $stmtActual = $pdo->prepare("SELECT estado FROM citas WHERE id = :id FOR UPDATE");
         $stmtActual->execute(["id" => $id]);
         $citaActual = $stmtActual->fetch();
@@ -73,7 +84,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 require_once __DIR__ . "/includes/layout.php";
-renderSidebar("citas");
+renderSidebar($rolId === 4 ? "mis_citas" : "citas");
 ?>
 <div style="max-width: 700px; margin: 0 auto;">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">

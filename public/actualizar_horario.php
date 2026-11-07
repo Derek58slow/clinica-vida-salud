@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $rolId = (int) ($_SESSION['rol_id'] ?? 0);
 
-if (!in_array($rolId, [1, 2, 3], true)) {
+if ($rolId !== 1) {
     http_response_code(403);
     exit('Acceso denegado.');
 }
@@ -78,6 +78,7 @@ try {
     exit;
 } catch (Throwable $e) {
     error_log($e->getMessage());
-    header('Location: editar_horario.php?id=' . $id . '&error=servidor');
+    $codigo=$e->getCode()==='PVS01'?'citas':($e->getCode()==='23P01'?'superpuesto':'servidor');
+    header('Location: editar_horario.php?id=' . $id . '&error='.$codigo);
     exit;
 }

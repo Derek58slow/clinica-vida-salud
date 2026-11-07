@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $rolId = (int) ($_SESSION['rol_id'] ?? 0);
 
-if (!in_array($rolId, [1, 2, 3], true)) {
+if ($rolId !== 1) {
     http_response_code(403);
     exit('No tienes permiso.');
 }

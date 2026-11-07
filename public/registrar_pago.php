@@ -1,0 +1,32 @@
+<?php
+require_once __DIR__.'/includes/panel_helpers.php';
+exigirRol([1,2]);
+require_once __DIR__.'/../config/database.php';
+if(empty($_SESSION['csrf_token']))$_SESSION['csrf_token']=bin2hex(random_bytes(32));
+$citaId=filter_input(INPUT_GET,'cita_id',FILTER_VALIDATE_INT)?:filter_var($_POST['cita_id']??null,FILTER_VALIDATE_INT);
+if(!$citaId){header('Location: pagos.php');exit;}
+$cita=null;$error=null;
+try{
+    $pdo=conectarBD();
+    $s=$pdo->prepare("SELECT c.id,c.codigo_cita,c.inicio,c.estado,c.paciente_id,p.nombres||' '||p.apellidos paciente,p.documento_identidad,e.nombre especialidad,m.nombres||' '||m.apellidos medico,EXISTS(SELECT 1 FROM pagos pg WHERE pg.cita_id=c.id AND pg.estado='pagado') pagada FROM citas c JOIN pacientes p ON p.id=c.paciente_id JOIN especialidades e ON e.id=c.especialidad_id JOIN medicos m ON m.id=c.medico_id WHERE c.id=:id");$s->execute(['id'=>$citaId]);$cita=$s->fetch();
+    if(!$cita||!in_array($cita['estado'],['confirmada','completada'],true)||$cita['pagada']){$error='Esta cita no está disponible para registrar un pago.';}
+    if($_SERVER['REQUEST_METHOD']==='POST'&&!$error){
+        $token=$_POST['csrf_token']??'';if(!is_string($token)||!hash_equals($_SESSION['csrf_token'],$token)){http_response_code(403);exit('Solicitud no válida.');}
+        $monto=filter_var(str_replace(',','.',trim((string)($_POST['monto']??''))),FILTER_VALIDATE_FLOAT);$metodo=(string)($_POST['metodo']??'');$referencia=trim((string)($_POST['referencia']??''));$observaciones=trim((string)($_POST['observaciones']??''));
+        if($monto===false||$monto<=0||$monto>99999999.99||!in_array($metodo,['efectivo','qr','tarjeta','transferencia'],true)||($metodo!=='efectivo'&&$referencia==='')||mb_strlen($referencia)>100||mb_strlen($observaciones)>500){$error='Revisa el monto, método y referencia ingresados.';}
+        else{
+            $pdo->beginTransaction();$lock=$pdo->prepare("SELECT id,paciente_id,estado FROM citas WHERE id=:id FOR UPDATE");$lock->execute(['id'=>$citaId]);$actual=$lock->fetch();
+            if(!$actual||!in_array($actual['estado'],['confirmada','completada'],true))throw new RuntimeException('Cita no válida para cobro.');
+            $existe=$pdo->prepare("SELECT 1 FROM pagos WHERE cita_id=:id AND estado='pagado'");$existe->execute(['id'=>$citaId]);if($existe->fetch())throw new RuntimeException('La cita ya tiene un pago activo.');
+            $codigo='PAGO-'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(3)));
+            $ins=$pdo->prepare("INSERT INTO pagos(codigo_pago,cita_id,paciente_id,monto,metodo,referencia,observaciones,registrado_por) VALUES(:codigo,:cita,:paciente,:monto,:metodo,:referencia,:observaciones,:usuario) RETURNING id");$ins->execute(['codigo'=>$codigo,'cita'=>$citaId,'paciente'=>$actual['paciente_id'],'monto'=>number_format($monto,2,'.',''),'metodo'=>$metodo,'referencia'=>$referencia!==''?$referencia:null,'observaciones'=>$observaciones!==''?$observaciones:null,'usuario'=>$_SESSION['usuario_id']]);$pagoId=(int)$ins->fetchColumn();
+            $pdo->prepare("INSERT INTO historial_pagos(pago_id,usuario_id,accion,comentario) VALUES(:pago,:usuario,'registro',:comentario)")->execute(['pago'=>$pagoId,'usuario'=>$_SESSION['usuario_id'],'comentario'=>'Pago registrado desde recepción']);$pdo->commit();$_SESSION['csrf_token']=bin2hex(random_bytes(32));header('Location: pagos.php?registrado=1&pago_id='.$pagoId);exit;
+        }
+    }
+}catch(Throwable $e){if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();error_log($e->getMessage());$error='No se pudo registrar el pago. Verifica que la cita no tenga otro cobro activo.';}
+require_once __DIR__.'/includes/layout.php';renderSidebar('pagos');
+?>
+<div class="payment-form-shell"><div class="doctor-page-heading"><div><span class="doctor-eyebrow">Caja de recepción</span><h1>Registrar pago</h1><p><?= $cita?h($cita['codigo_cita']):'Cita no disponible' ?></p></div><a class="btn btn-secondary" href="pagos.php">Volver</a></div>
+<?php if($error):?><div class="alert alert-error"><?= h($error) ?></div><?php endif;?>
+<?php if($cita&&!$error):?><div class="payment-form-grid"><section class="card"><div class="card-header"><h2 class="card-title">Datos de la cita</h2></div><div class="card-body profile-data"><div><span>Paciente</span><strong><?= h($cita['paciente']) ?></strong></div><div><span>Documento</span><strong><?= h($cita['documento_identidad']?:'No registrado') ?></strong></div><div><span>Especialidad</span><strong><?= h($cita['especialidad']) ?></strong></div><div><span>Médico</span><strong>Dr(a). <?= h($cita['medico']) ?></strong></div><div><span>Fecha</span><strong><?= date('d/m/Y H:i',strtotime($cita['inicio'])) ?></strong></div><div><span>Estado</span><strong><?= h(nombreEstado($cita['estado'])) ?></strong></div></div></section><section class="card"><div class="card-header"><h2 class="card-title">Información del cobro</h2></div><div class="card-body"><form method="POST" class="stack"><input type="hidden" name="csrf_token" value="<?= h($_SESSION['csrf_token']) ?>"><input type="hidden" name="cita_id" value="<?= (int)$citaId ?>"><div class="form-group"><label class="form-label required" for="pago-monto">Monto en bolivianos</label><div class="money-input"><span>Bs</span><input class="form-input" id="pago-monto" name="monto" type="number" min="0.01" max="99999999.99" step="0.01" required placeholder="0.00"></div></div><div class="form-group"><label class="form-label required" for="pago-metodo">Método de pago</label><select class="form-select" id="pago-metodo" name="metodo" required><option value="efectivo">Efectivo</option><option value="qr">QR</option><option value="tarjeta">Tarjeta</option><option value="transferencia">Transferencia</option></select></div><div class="form-group"><label class="form-label" for="pago-referencia">Referencia de operación</label><input class="form-input" id="pago-referencia" name="referencia" maxlength="100" placeholder="Obligatoria para pagos no realizados en efectivo"><small class="form-hint">Código de transacción, voucher o referencia bancaria.</small></div><div class="form-group"><label class="form-label" for="pago-observaciones">Observaciones</label><textarea class="form-textarea" id="pago-observaciones" name="observaciones" maxlength="500" rows="3"></textarea></div><button class="btn btn-primary" type="submit"><?= icono('atendida') ?> Registrar y emitir recibo</button></form></div></section></div><?php endif;?></div>
+<?php renderFooter();?>

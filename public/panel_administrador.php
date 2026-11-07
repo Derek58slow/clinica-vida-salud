@@ -1,0 +1,25 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__.'/includes/panel_helpers.php';exigirRol([1]);
+require_once __DIR__.'/../config/database.php';
+require_once __DIR__.'/../src/Services/panel_administrador.php';
+$panel=['resumen'=>[],'citas'=>[],'actividad'=>[]];
+try{$panel=obtenerPanelAdministrador(conectarBD());}catch(Throwable $e){error_log($e->getMessage());}
+$stats=$panel['resumen'];$citas=$panel['citas'];$actividad=$panel['actividad'];
+$acciones=['creacion'=>'Creación','cambio_estado'=>'Cambio de estado','reprogramacion'=>'Reprogramación','actualizacion'=>'Actualización'];
+require_once __DIR__.'/includes/layout.php';renderSidebar('panel');
+?>
+<div class="page-heading admin-heading"><div><span class="eyebrow">CONTROL GENERAL · <?= date('d/m/Y') ?></span><h1>Panel administrativo</h1><p>Indicadores, actividad y accesos principales de Clínica Vida Salud.</p></div><div class="report-export-actions"><a class="btn btn-secondary" href="auditoria.php">Ver auditoría</a><a class="btn btn-primary" href="reportes.php">Abrir reportes</a></div></div>
+<div class="stats-grid admin-stats">
+<?php foreach([['Pacientes activos','pacientes','blue','pacientes'],['Médicos activos','medicos','green','medico'],['Citas de hoy','citas_hoy','orange','agenda'],['Por confirmar','por_confirmar','purple','reloj'],['Cobrado hoy','cobrado_hoy','green','atendida'],['Pagos pendientes','pagos_pendientes','orange','historial']] as [$etiqueta,$clave,$color,$iconoNombre]):?>
+<div class="stat-card"><div class="stat-icon <?= $color ?>"><?= icono($iconoNombre) ?></div><div class="stat-info"><div class="stat-label"><?= h($etiqueta) ?></div><div class="stat-value"><?= $clave==='cobrado_hoy'?'Bs '.number_format((float)($stats[$clave]??0),2):number_format((int)($stats[$clave]??0)) ?></div></div></div>
+<?php endforeach;?>
+</div>
+<div class="admin-dashboard-grid">
+<section class="card"><div class="card-header"><div><h2 class="card-title">Próximas citas</h2><p class="card-subtitle"><?= (int)($stats['proximas']??0) ?> cita(s) activas programadas</p></div><a class="btn btn-sm btn-secondary" href="citas_moderno.php">Ver todas</a></div><div class="card-body flush"><?php if(!$citas):?><div class="empty-state">No hay citas próximas.</div><?php else:?><div class="table-container"><table class="table admin-upcoming-table"><thead><tr><th>Paciente</th><th>Médico</th><th>Especialidad</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody><?php foreach($citas as $cita):?><tr><td><?= h($cita['paciente']) ?></td><td>Dr(a). <?= h($cita['medico']) ?></td><td><?= h($cita['especialidad']) ?></td><td><strong><?= date('d/m/Y',strtotime($cita['inicio'])) ?></strong><small class="table-secondary-text"><?= date('H:i',strtotime($cita['inicio'])) ?></small></td><td><span class="badge badge-<?= estadoBadge($cita['estado']) ?>"><?= h(nombreEstado($cita['estado'])) ?></span></td><td><a class="btn btn-sm btn-secondary" href="ver_cita.php?id=<?= (int)$cita['id'] ?>">Ver</a></td></tr><?php endforeach;?></tbody></table></div><?php endif;?></div></section>
+<section class="card"><div class="card-header"><div><h2 class="card-title">Actividad reciente</h2><p class="card-subtitle">Últimos cambios registrados</p></div><a class="btn btn-sm btn-secondary" href="auditoria.php">Historial</a></div><div class="card-body admin-activity-list"><?php if(!$actividad):?><div class="empty-state">No hay actividad registrada.</div><?php else:?><?php foreach($actividad as $evento):?><a href="ver_cita.php?id=<?= (int)$evento['cita_id'] ?>"><span class="activity-icon"><?= icono($evento['accion']==='reprogramacion'?'agenda':'historial') ?></span><span><strong><?= h($acciones[$evento['accion']]??ucfirst($evento['accion'])) ?> · <?= h($evento['paciente']) ?></strong><small><?= h($evento['codigo_cita']) ?> · <?= h($evento['actor']) ?></small></span><time><?= date('d/m H:i',strtotime($evento['created_at'])) ?></time></a><?php endforeach;?><?php endif;?></div></section>
+</div>
+<section class="card admin-tools"><div class="card-header"><div><h2 class="card-title">Herramientas administrativas</h2><p class="card-subtitle">Accesos rápidos organizados por tarea</p></div></div><div class="card-body admin-tool-grid">
+<?php foreach([['usuarios_moderno.php','Usuarios e invitaciones','Crear cuentas y habilitar accesos','perfil'],['medicos_moderno.php','Médicos','Perfiles, especialidades y estado','medico'],['especialidades_moderno.php','Especialidades','Áreas de atención disponibles','atendida'],['horarios_moderno.php','Horarios','Jornadas, duración y disponibilidad','reloj'],['pagos.php','Pagos y caja','Cobros, métodos y recibos','historial'],['reportes.php','Reportes','Indicadores, PDF y Excel','agenda'],['auditoria.php','Auditoría','Trazabilidad de todas las citas','escudo']] as [$url,$titulo,$descripcion,$ico]):?><a href="<?= h($url) ?>"><span><?= icono($ico) ?></span><div><strong><?= h($titulo) ?></strong><small><?= h($descripcion) ?></small></div><?= icono('flecha') ?></a><?php endforeach;?>
+</div></section>
+<?php renderFooter();?>

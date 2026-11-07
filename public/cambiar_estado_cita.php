@@ -31,6 +31,7 @@ if (!$id || !$nuevoEstado) {
 }
 
 require_once __DIR__ . "/../config/database.php";
+require_once __DIR__ . '/includes/panel_helpers.php';
 $pdo = conectarBD();
 
 $estadosValidos = ["confirmada", "completada", "no_asistio"];
@@ -41,6 +42,7 @@ if (!in_array($nuevoEstado, $estadosValidos, true)) {
 
 try {
     $pdo->beginTransaction();
+    establecerActorAuditoria($pdo, (int)$_SESSION['usuario_id']);
     $stmt = $pdo->prepare("SELECT * FROM citas WHERE id = :id FOR UPDATE");
     $stmt->execute(["id" => $id]);
     $cita = $stmt->fetch();
@@ -69,7 +71,7 @@ try {
             http_response_code(403);
             exit("No tienes permiso.");
         }
-        $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u");
+        $stm = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u AND activo = TRUE");
         $stm->execute(["u" => $_SESSION["usuario_id"]]);
         $mp = $stm->fetch();
         if (!$mp || (int)$mp["id"] !== (int)$cita["medico_id"]) {
@@ -79,11 +81,17 @@ try {
         }
     }
 
+    if (!transicionCitaPermitida($cita['estado'], $nuevoEstado, $rolId, new DateTimeImmutable($cita['inicio']))) {
+        $pdo->rollBack();
+        header("Location: ver_cita.php?id=$id&error=fecha");
+        exit;
+    }
     $upd = $pdo->prepare("UPDATE citas SET estado = :est, updated_at = now() WHERE id = :id");
     $upd->execute(["est" => $nuevoEstado, "id" => $id]);
     $pdo->commit();
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
-    header("Location: ver_cita.php?id=$id&estado_ok=1");
+    $contexto = contextoAgenda($_POST);
+    header("Location: ver_cita.php?id=$id&estado_ok=1&$contexto");
     exit;
 } catch (Throwable $e) {
     if (isset($pdo)) { try { $pdo->rollBack(); } catch (Throwable $e2) {} }

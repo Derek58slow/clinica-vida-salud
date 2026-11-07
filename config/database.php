@@ -1,5 +1,6 @@
-
 <?php
+
+require_once __DIR__ . '/../src/Services/clinica.php';
 
 function conectarBD(): PDO
 {
@@ -19,7 +20,7 @@ function conectarBD(): PDO
 
     $dsn = "pgsql:host=$host;port=$puerto;dbname=$baseDatos";
 
-    return new PDO(
+    $pdo = new PDO(
         $dsn,
         $usuario,
         $contrasena,
@@ -28,4 +29,7 @@ function conectarBD(): PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
         ]
     );
+    $stmt = $pdo->prepare("SELECT set_config('TimeZone', :zona, false)");
+    $stmt->execute(['zona' => date_default_timezone_get()]);
+    return $pdo;
 }

@@ -20,8 +20,21 @@ if (!$pacienteId) {
 
 require_once __DIR__ . "/../config/database.php";
 require_once __DIR__ . "/includes/layout.php";
+require_once __DIR__ . '/includes/panel_helpers.php';
 
 $pdo = conectarBD();
+$medicoIdPropio = null;
+if ($rolId === 3) {
+    $stmtM = $pdo->prepare("SELECT id FROM medicos WHERE usuario_id = :u AND activo = TRUE");
+    $stmtM->execute(["u" => $_SESSION["usuario_id"]]);
+    $medicoIdPropio = (int)($stmtM->fetchColumn() ?: 0);
+    $stmtRelacion = $pdo->prepare("SELECT EXISTS(SELECT 1 FROM citas WHERE paciente_id = :p AND medico_id = :m)");
+    $stmtRelacion->execute(["p" => $pacienteId, "m" => $medicoIdPropio]);
+    if (!$medicoIdPropio || !$stmtRelacion->fetchColumn()) {
+        http_response_code(403);
+        exit("No tienes permiso para ver el historial de este paciente.");
+    }
+}
 $stmtP = $pdo->prepare("SELECT * FROM pacientes WHERE id = :id");
 $stmtP->execute(["id" => $pacienteId]);
 $paciente = $stmtP->fetch();
@@ -34,21 +47,25 @@ $stmt = $pdo->prepare("SELECT c.*, m.nombres AS med_nombres, m.apellidos AS med_
                        FROM citas c
                        JOIN medicos m ON m.id = c.medico_id
                        JOIN especialidades e ON e.id = c.especialidad_id
-                       WHERE c.paciente_id = :p
+                       WHERE c.paciente_id = :p" . ($rolId === 3 ? " AND c.medico_id = :medico" : "") . "
                        ORDER BY c.inicio DESC");
-$stmt->execute(["p" => $pacienteId]);
+$paramsCitas = ["p" => $pacienteId];
+if ($rolId === 3) $paramsCitas["medico"] = $medicoIdPropio;
+$stmt->execute($paramsCitas);
 $citas = $stmt->fetchAll();
 
 $stmtH = $pdo->prepare("SELECT h.*, c.id AS cita_id, c.codigo_cita, u.nombre AS usuario_nombre
                         FROM historial_citas h
                         JOIN citas c ON c.id = h.cita_id
                         LEFT JOIN usuarios u ON u.id = h.usuario_id
-                        WHERE c.paciente_id = :p
+                        WHERE c.paciente_id = :p" . ($rolId === 3 ? " AND c.medico_id = :medico" : "") . "
                         ORDER BY h.created_at DESC");
-$stmtH->execute(["p" => $pacienteId]);
+$paramsHistorial = ["p" => $pacienteId];
+if ($rolId === 3) $paramsHistorial["medico"] = $medicoIdPropio;
+$stmtH->execute($paramsHistorial);
 $historial = $stmtH->fetchAll();
 
-renderSidebar("pacientes");
+renderSidebar($rolId === 3 ? "medico_pacientes" : "pacientes");
 ?>
 <div style="max-width: 1200px; margin: 0 auto;">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
@@ -57,8 +74,13 @@ renderSidebar("pacientes");
             <p style="color: var(--color-text-light);"><?= htmlspecialchars($paciente["apellidos"].", ".$paciente["nombres"]) ?> <?php if($paciente["documento_identidad"]): ?>- CI: <?= htmlspecialchars($paciente["documento_identidad"]) ?><?php endif; ?></p>
         </div>
         <div style="display: flex; gap: 10px;">
-            <a href="pacientes_moderno.php" class="btn btn-secondary">Volver a Pacientes</a>
-            <a href="editar_paciente_moderno.php?id=<?= (int)$pacienteId ?>" class="btn btn-secondary">Ver Paciente</a>
+            <?php if ($rolId===3): ?>
+            <a href="medico_pacientes.php" class="btn btn-secondary">Volver a mis pacientes</a>
+            <a href="medico_paciente.php?id=<?= (int)$pacienteId ?>" class="btn btn-primary">Ver ficha relacionada</a>
+            <?php else: ?>
+            <a href="pacientes_moderno.php" class="btn btn-secondary">Volver a pacientes</a>
+            <a href="editar_paciente_moderno.php?id=<?= (int)$pacienteId ?>" class="btn btn-secondary">Ver paciente</a>
+            <?php endif; ?>
         </div>
     </div>
 

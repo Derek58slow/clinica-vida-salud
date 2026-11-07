@@ -7,7 +7,7 @@ if (!isset($_SESSION["usuario_id"])) {
 }
 
 $rolId = (int) ($_SESSION["rol_id"] ?? 0);
-if (!in_array($rolId, [1, 2], true)) {
+if (!in_array($rolId, [1, 2, 4], true)) {
     http_response_code(403);
     exit("No tienes permiso.");
 }
@@ -32,6 +32,16 @@ if (!$cita) {
     header("Location: citas_moderno.php");
     exit;
 }
+if ($rolId === 4) {
+    $propietario = $pdo->prepare('SELECT id FROM pacientes WHERE usuario_id=:usuario_id AND activo=TRUE');
+    $propietario->execute(['usuario_id'=>$_SESSION['usuario_id']]);
+    $paciente = $propietario->fetch();
+    if (!$paciente || (int)$paciente['id'] !== (int)$cita['paciente_id']) { http_response_code(403); exit('No tienes permiso para reprogramar esta cita.'); }
+}
+if (strtotime($cita['inicio']) <= time()) {
+    header('Location: ver_cita.php?id='.$id.'&error=no_reprogramar');
+    exit;
+}
 
 if (!in_array($cita["estado"], ["solicitada", "confirmada"], true)) {
     header("Location: ver_cita.php?id=".$id."&error=no_reprogramar");
@@ -42,7 +52,7 @@ $fecha = trim($_GET["fecha"] ?? "");
 $horaSeleccionada = trim($_GET["hora"] ?? "");
 $horariosDisponibles = [];
 
-if ($fecha && preg_match("/^\d{4}-\d{2}-\d{2}$/", $fecha)) {
+if (fechaClinicaValida($fecha)) {
     if ($fecha >= date("Y-m-d")) {
         try {
             $diaSemana = (int)date("N", strtotime($fecha));
@@ -94,12 +104,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
     $nuevaFecha = trim($_POST["fecha"] ?? "");
     $nuevaHora = trim($_POST["hora_inicio"] ?? "");
-    if (!preg_match("/^\d{4}-\d{2}-\d{2}$/", $nuevaFecha) || !preg_match("/^\d{2}:\d{2}$/", $nuevaHora) || $nuevaFecha < date("Y-m-d")) {
+    $inicioValidado = inicioCitaValido($nuevaFecha, $nuevaHora);
+    if (!$inicioValidado) {
         header("Location: reprogramar_cita.php?id=$id&error=datos");
+        exit;
+    }
+    if ($inicioValidado <= new DateTimeImmutable()) {
+        header("Location: reprogramar_cita.php?id=$id&error=pasado");
         exit;
     }
     try {
         $pdo->beginTransaction();
+        establecerActorAuditoria($pdo, (int)$_SESSION['usuario_id']);
         $stmtActual = $pdo->prepare("SELECT estado FROM citas WHERE id = :id FOR UPDATE");
         $stmtActual->execute(["id" => $id]);
         $citaActual = $stmtActual->fetch();
@@ -162,7 +178,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 require_once __DIR__ . "/includes/layout.php";
-renderSidebar("citas");
+renderSidebar($rolId === 4 ? "mis_citas" : "citas");
 ?>
 <div style="max-width: 900px; margin: 0 auto;">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">

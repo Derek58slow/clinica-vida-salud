@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $rolId = (int) ($_SESSION['rol_id'] ?? 0);
 
-if (!in_array($rolId, [1, 2, 3], true)) {
+if ($rolId !== 1) {
     http_response_code(403);
     exit('No tienes permiso para gestionar horarios.');
 }
@@ -41,11 +41,12 @@ renderSidebar('horarios');
             <h1 style="font-size: 28px; font-weight: 700; color: var(--color-text); margin-bottom: 6px;">Horarios de atención</h1>
             <p style="color: var(--color-text-light); font-size: 14px;">Configura días, horas e intervalos por médico</p>
         </div>
-        <a href="registrar_horario.php" class="btn btn-primary" style="padding: 11px 22px; font-weight: 600;">Nuevo horario</a>
+        <div class="action-row"><a href="bloqueos_horario.php" class="btn btn-secondary"><?= icono('ausencia') ?> Ausencias y bloqueos</a><a href="registrar_horario.php" class="btn btn-primary"><?= icono('agenda') ?> Nuevo horario</a></div>
     </div>
 </div>
 
 <?php if (isset($error)): ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+<?php if (isset($_GET['error'])): ?><div class="alert alert-error"><?= htmlspecialchars(['citas'=>'Este horario tiene citas activas pendientes. Reprograma o cancela esas citas antes de modificar la disponibilidad.','superpuesto'=>'No se puede activar un horario que se superpone con otro turno activo.','servidor'=>'No se pudo actualizar el horario.'][$_GET['error']]??'No se pudo actualizar el horario.') ?></div><?php endif; ?>
 <?php if (isset($_GET['registrado'])): ?><div class="alert alert-success">Horario registrado correctamente</div><?php endif; ?>
 <?php if (isset($_GET['actualizado'])): ?><div class="alert alert-success">Horario actualizado correctamente</div><?php endif; ?>
 <?php if (isset($_GET['cambiado'])): ?><div class="alert alert-success">Estado actualizado</div><?php endif; ?>

@@ -1,4 +1,3 @@
-
 <?php
 session_start();
 
@@ -9,4 +8,3 @@ if (!isset($_SESSION['usuario_id'])) {
 
 header('Location: panel_moderno.php');
 exit;
-

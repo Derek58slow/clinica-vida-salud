@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $rolId = (int) ($_SESSION['rol_id'] ?? 0);
 
-if (!in_array($rolId, [1, 2], true)) {
+if (!in_array($rolId, [1, 2, 4], true)) {
     http_response_code(403);
     exit('No tienes permiso.');
 }
@@ -40,7 +40,12 @@ if (!$pacienteId || !$medicoId || !$especialidadId || $fecha === '' || $horaInic
     exit;
 }
 
-if ($fecha < date('Y-m-d')) {
+$inicioValidado = inicioCitaValido($fecha, $horaInicio);
+if (!$inicioValidado) {
+    header('Location: nueva_cita.php?error=datos');
+    exit;
+}
+if ($inicioValidado <= new DateTimeImmutable()) {
     header('Location: nueva_cita.php?error=pasado');
     exit;
 }
@@ -51,7 +56,15 @@ if (!in_array($modalidad, ['presencial', 'virtual'], true)) {
 
 try {
     $pdo = conectarBD();
+    if ($rolId === 4) {
+        $propietario = $pdo->prepare('SELECT id FROM pacientes WHERE usuario_id=:usuario_id AND activo=TRUE');
+        $propietario->execute(['usuario_id'=>$_SESSION['usuario_id']]);
+        $pacientePropio = $propietario->fetch();
+        if (!$pacientePropio) { http_response_code(403); exit('Tu cuenta no tiene una ficha de paciente activa.'); }
+        $pacienteId = (int)$pacientePropio['id'];
+    }
     $pdo->beginTransaction();
+    establecerActorAuditoria($pdo, (int)$_SESSION['usuario_id']);
     
     $checkMed = $pdo->prepare("SELECT activo FROM medicos WHERE id = :id");
     $checkMed->execute(['id' => $medicoId]);
@@ -137,7 +150,7 @@ try {
         header('Location: nueva_cita.php?error=horario');
         exit;
     }
-    $inicioTs = $fecha . ' ' . $horaInicio . ':00';
+    $inicioTs = $inicioValidado->format('Y-m-d H:i:s');
     $finTs = date('Y-m-d H:i:s', $finPropuestoTs);
     
     // Verificar bloqueos
@@ -176,7 +189,7 @@ try {
     
     $pdo->commit();
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    header('Location: citas_moderno.php?registrada=1');
+    header('Location: ' . ($rolId === 4 ? 'mis_citas.php?registrada=1' : 'citas_moderno.php?registrada=1'));
     exit;
 } catch (Throwable $e) {
     if (isset($pdo)) {
